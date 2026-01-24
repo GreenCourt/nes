@@ -235,8 +235,10 @@ impl CPU {
             }
 
             AddressingMode::Relative => {
-                let offset: u8 = self.mem_read(self.program_counter + 1);
-                (self.program_counter as i16 + 2 + offset as i16) as u16
+                let offset: i8 = self.mem_read(self.program_counter + 1) as i8;
+                self.program_counter
+                    .wrapping_add(2)
+                    .wrapping_add(offset as u16)
             }
 
             AddressingMode::Accumulator => {
@@ -881,7 +883,10 @@ mod test {
                 AddressingMode::Accumulator | AddressingMode::Implied => String::from("     "),
             };
 
-            let mnemonic: String = format!("{:?}", instruction.mnemonic);
+            let mnemonic: String = match instruction.mnemonic {
+                Mnemonic::NOP => String::from(if opcode == 0xEA { "NOP" } else { "*NOP" }),
+                _ => format!("{:?}", instruction.mnemonic),
+            };
 
             let memory_value =
                 if instruction.mnemonic == Mnemonic::JMP || instruction.mnemonic == Mnemonic::JSR {
@@ -956,7 +961,7 @@ mod test {
                     self.mem_read_u16(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::AbsoluteY),
                 ),
-                AddressingMode::indirect => {
+                AddressingMode::Indirect => {
                     format!("(${:04X})", self.mem_read_u16(self.program_counter + 1))
                 }
                 AddressingMode::Accumulator => String::from("A"),
@@ -1612,12 +1617,12 @@ mod test {
             0b0000_0100,
             Opcode::ASL_Accumulator as u8,
             Opcode::BCC_Relative as u8,
-            0xAA,
+            0x0A,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8010);
     }
 
     #[test]
@@ -1642,12 +1647,12 @@ mod test {
             0b1000_0000,
             Opcode::ASL_Accumulator as u8,
             Opcode::BCS_Relative as u8,
-            0xAA,
+            0x0B,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8011);
     }
 
     #[test]
@@ -1672,12 +1677,12 @@ mod test {
             0b0000_0000,
             Opcode::ASL_Accumulator as u8,
             Opcode::BEQ_Relative as u8,
-            0xAA,
+            0x0C,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8012);
     }
 
     #[test]
@@ -1788,12 +1793,12 @@ mod test {
             0b0100_0000,
             Opcode::ASL_Accumulator as u8,
             Opcode::BMI_Relative as u8,
-            0xAA,
+            0x0D,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8013);
     }
 
     #[test]
@@ -1818,12 +1823,12 @@ mod test {
             0b0001_0000,
             Opcode::ASL_Accumulator as u8,
             Opcode::BNE_Relative as u8,
-            0xAA,
+            0x0E,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8014);
     }
 
     #[test]
@@ -1848,12 +1853,12 @@ mod test {
             0b1010_0000,
             Opcode::ASL_Accumulator as u8,
             Opcode::BPL_Relative as u8,
-            0xAA,
+            0x0F,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80B0);
+        assert_eq!(cpu.program_counter, 0x8015);
     }
 
     #[test]
@@ -1893,13 +1898,13 @@ mod test {
             Opcode::BIT_ZeroPage as u8,
             0xCC,
             Opcode::BVC_Relative as u8,
-            0xAA,
+            0x09,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AF);
+        assert_eq!(cpu.program_counter, 0x800E);
     }
 
     #[test]
@@ -1923,13 +1928,13 @@ mod test {
             Opcode::BIT_ZeroPage as u8,
             0xCC,
             Opcode::BVS_Relative as u8,
-            0xAA,
+            0x08,
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AF);
+        assert_eq!(cpu.program_counter, 0x800D);
     }
 
     #[test]
