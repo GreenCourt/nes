@@ -54,6 +54,11 @@ impl Rom {
             screen_mirroring: screen_mirroring,
         })
     }
+
+    pub fn from_file(path: &str) -> Result<Rom, String> {
+        let bytes: Vec<u8> = fs::read(path).map_err(|e| e.to_string())?;
+        Rom::new(&bytes)
+    }
 }
 
 #[cfg(test)]

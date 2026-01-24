@@ -46,7 +46,8 @@ impl CPU {
     const STATUS_ZERO: u8 = 0b0000_0010;
     const STATUS_INTERRUPT_DISABLE: u8 = 0b0000_0100;
     const STATUS_DECIMAL_MODE: u8 = 0b0000_1000;
-    const STATUS_BREAK_COMMAND: u8 = 0b0001_0000;
+    const STATUS_BREAK: u8 = 0b0001_0000;
+    const STATUS_RESERVED: u8 = 0b0010_0000;
     const STATUS_OVERFLOW: u8 = 0b0100_0000;
     const STATUS_NEGATIVE: u8 = 0b1000_0000;
 
@@ -90,16 +91,16 @@ impl CPU {
         };
     }
 
-    fn set_break_command_flag(&mut self, flag: bool) {
+    fn set_break_flag(&mut self, flag: bool) {
         if flag {
-            self.status |= CPU::STATUS_BREAK_COMMAND;
+            self.status |= CPU::STATUS_BREAK;
         } else {
-            self.status &= !CPU::STATUS_BREAK_COMMAND;
+            self.status &= !CPU::STATUS_BREAK;
         };
     }
 
-    fn get_break_command_flag(&mut self) -> bool {
-        (self.status & CPU::STATUS_BREAK_COMMAND) != 0
+    fn get_break_flag(&mut self) -> bool {
+        (self.status & CPU::STATUS_BREAK) != 0
     }
 
     fn set_overflow_flag(&mut self, flag: bool) {
@@ -198,29 +199,44 @@ impl CPU {
 
             AddressingMode::Indirect => {
                 let ptr = self.mem_read_u16(self.program_counter + 1);
-                let addr = self.mem_read_u16(ptr);
+                let addr = if ptr & 0x00FF == 0x00FF {
+                    // https://forums.nesdev.org/viewtopic.php?t=19140
+                    let lo = self.mem_read(ptr) as u16;
+                    let hi = self.mem_read(ptr & 0xFF00) as u16;
+                    (hi << 8) | lo
+                } else {
+                    self.mem_read_u16(ptr)
+                };
                 addr
             }
 
             AddressingMode::IndirectX => {
                 let ptr_base: u8 = self.mem_read(self.program_counter + 1);
-                // wrap as u8, then cast to u16
-                let ptr: u16 = ptr_base.wrapping_add(self.register_x) as u16;
-                let addr = self.mem_read_u16(ptr as u16);
-                addr
+                let ptr: u8 = ptr_base.wrapping_add(self.register_x); // wrap as u8
+
+                let lo = self.mem_read(ptr as u16) as u16;
+                let hi = self.mem_read(
+                    ptr.wrapping_add(1) as u16, /* wrap as u8 then cast to u16 */
+                ) as u16;
+                (hi << 8) | lo // this is different to mem_read_u16 because of wrapping
             }
 
             AddressingMode::IndirectY => {
-                let ptr = self.mem_read(self.program_counter + 1);
-                let base: u16 = self.mem_read_u16(ptr as u16);
-                // wrap as u16
+                let ptr: u8 = self.mem_read(self.program_counter + 1);
+
+                let lo = self.mem_read(ptr as u16) as u16;
+                let hi = self.mem_read(
+                    ptr.wrapping_add(1) as u16, /* wrap as u8 then cast to u16 */
+                ) as u16;
+
+                let base = (hi << 8) | lo; // this is different to mem_read_u16 because of wrapping
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
 
             AddressingMode::Relative => {
                 let offset: u8 = self.mem_read(self.program_counter + 1);
-                (self.program_counter as i16 + offset as i16) as u16
+                (self.program_counter as i16 + 2 + offset as i16) as u16
             }
 
             AddressingMode::Accumulator => {
@@ -285,8 +301,6 @@ impl CPU {
         if !self.get_carry_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -295,8 +309,6 @@ impl CPU {
         if self.get_carry_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -305,8 +317,6 @@ impl CPU {
         if self.get_zero_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -325,8 +335,6 @@ impl CPU {
         if self.get_negative_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -335,8 +343,6 @@ impl CPU {
         if !self.get_zero_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -345,8 +351,6 @@ impl CPU {
         if !self.get_negative_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -355,7 +359,7 @@ impl CPU {
         self.stack_push_u16(self.program_counter);
         self.stack_push(self.status);
         // TODO the IRQ interrupt vector at $FFFE/F is loaded into the PC
-        self.set_break_command_flag(true);
+        self.set_break_flag(true);
     }
 
     fn bvc(&mut self) {
@@ -363,8 +367,6 @@ impl CPU {
         if !self.get_overflow_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -373,8 +375,6 @@ impl CPU {
         if self.get_overflow_flag() {
             let addr = self.get_operand_address(&AddressingMode::Relative);
             self.program_counter = addr;
-        } else {
-            self.program_counter += 2; // to next opcode
         }
     }
 
@@ -402,7 +402,7 @@ impl CPU {
         // Compare
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.set_carry_flag(self.register_a > value);
+        self.set_carry_flag(self.register_a >= value);
         self.update_zero_flag(self.register_a.wrapping_sub(value));
         self.update_negative_flag(self.register_a.wrapping_sub(value));
     }
@@ -411,7 +411,7 @@ impl CPU {
         // Compare X Register
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.set_carry_flag(self.register_x > value);
+        self.set_carry_flag(self.register_x >= value);
         self.update_zero_flag(self.register_x.wrapping_sub(value));
         self.update_negative_flag(self.register_x.wrapping_sub(value));
     }
@@ -420,7 +420,7 @@ impl CPU {
         // Compare Y Register
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.set_carry_flag(self.register_y > value);
+        self.set_carry_flag(self.register_y >= value);
         self.update_zero_flag(self.register_y.wrapping_sub(value));
         self.update_negative_flag(self.register_y.wrapping_sub(value));
     }
@@ -486,19 +486,14 @@ impl CPU {
 
     fn jmp(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
-
-        // program_counter will be added by 3 for Absolute or Indirect
-        self.program_counter = addr.wrapping_sub(3);
+        self.program_counter = addr;
     }
 
     fn jsr(&mut self) {
         // Jump to Subroutine
         let addr = self.get_operand_address(&AddressingMode::Absolute);
-        self.stack_push_u16(self.program_counter + 3 - 1);
-
-        // program_counter will be added by 3 for Absolute
-        // we need to cancel it.
-        self.program_counter = addr.wrapping_sub(3);
+        self.stack_push_u16(self.program_counter + 3 - 1); // add 3 because of Absolute
+        self.program_counter = addr;
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -564,7 +559,7 @@ impl CPU {
 
     fn php(&mut self) {
         // Push Processor Status
-        self.stack_push(self.status);
+        self.stack_push(self.status | CPU::STATUS_BREAK | CPU::STATUS_RESERVED);
     }
 
     fn pla(&mut self) {
@@ -577,6 +572,8 @@ impl CPU {
     fn plp(&mut self) {
         // Pull Processor Status
         self.status = self.stack_pop();
+        self.status &= !CPU::STATUS_BREAK;
+        self.status |= CPU::STATUS_RESERVED;
     }
 
     fn rol(&mut self, mode: &AddressingMode) {
@@ -593,7 +590,6 @@ impl CPU {
 
             let carry = (value & 0b1000_0000) != 0;
             let result = ((value & 0x7F) << 1) + if self.get_carry_flag() { 1 } else { 0 };
-            self.register_a = result;
             self.mem_write(addr, result);
             (result, carry)
         };
@@ -626,7 +622,6 @@ impl CPU {
                 } else {
                     0
                 };
-            self.register_a = result;
             self.mem_write(addr, result);
             (result, carry)
         };
@@ -639,12 +634,16 @@ impl CPU {
     fn rti(&mut self) {
         // Return from Interrupt
         self.status = self.stack_pop();
+        self.status &= !CPU::STATUS_BREAK;
+        self.status |= CPU::STATUS_RESERVED;
+
         self.program_counter = self.stack_pop_u16();
+        self.program_counter -= 1;
     }
 
     fn rts(&mut self) {
         // Return from Subroutine
-        self.program_counter = self.stack_pop_u16();
+        self.program_counter = self.stack_pop_u16() + 1;
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -743,9 +742,18 @@ impl CPU {
     }
 
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
         loop {
+            callback(self);
             let opcode = self.mem_read(self.program_counter);
             let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
+            let program_counter_before = self.program_counter;
 
             match instruction.mnemonic {
                 Mnemonic::ADC => self.adc(&instruction.addressing_mode),
@@ -807,23 +815,25 @@ impl CPU {
                 _ => panic!("unknown opcode: 0x{:x}", opcode),
             }
 
-            self.program_counter += match instruction.addressing_mode {
-                AddressingMode::Accumulator => 1,
-                AddressingMode::Immediate => 2,
-                AddressingMode::ZeroPage => 2,
-                AddressingMode::ZeroPageX => 2,
-                AddressingMode::ZeroPageY => 2,
-                AddressingMode::Absolute => 3,
-                AddressingMode::AbsoluteX => 3,
-                AddressingMode::AbsoluteY => 3,
-                AddressingMode::Indirect => 3,
-                AddressingMode::IndirectX => 2,
-                AddressingMode::IndirectY => 2,
-                AddressingMode::Relative => 0, // program_counter is set by Instruction
-                AddressingMode::Implied => 1,
-            };
+            if self.program_counter == program_counter_before {
+                self.program_counter += match instruction.addressing_mode {
+                    AddressingMode::Accumulator => 1,
+                    AddressingMode::Immediate => 2,
+                    AddressingMode::ZeroPage => 2,
+                    AddressingMode::ZeroPageX => 2,
+                    AddressingMode::ZeroPageY => 2,
+                    AddressingMode::Absolute => 3,
+                    AddressingMode::AbsoluteX => 3,
+                    AddressingMode::AbsoluteY => 3,
+                    AddressingMode::Indirect => 3,
+                    AddressingMode::IndirectX => 2,
+                    AddressingMode::IndirectY => 2,
+                    AddressingMode::Relative => 2,
+                    AddressingMode::Implied => 1,
+                };
+            }
 
-            if self.get_break_command_flag() {
+            if self.get_break_flag() {
                 break;
             }
         }
@@ -834,6 +844,7 @@ impl CPU {
 mod test {
     use super::*;
     use crate::cartrige::Rom;
+    use std::fs;
 
     impl CPU {
         fn get_interrupt_disable_flag(&mut self) -> bool {
@@ -842,6 +853,129 @@ mod test {
 
         fn get_decimal_mode_flag(&mut self) -> bool {
             (self.status & CPU::STATUS_DECIMAL_MODE) != 0
+        }
+
+        fn trace(&mut self) -> String {
+            let opcode = self.mem_read(self.program_counter);
+            let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
+            let operand = match instruction.addressing_mode {
+                AddressingMode::Immediate
+                | AddressingMode::ZeroPage
+                | AddressingMode::ZeroPageX
+                | AddressingMode::ZeroPageY
+                | AddressingMode::IndirectX
+                | AddressingMode::IndirectY
+                | AddressingMode::Relative => {
+                    format!("{:02X}   ", self.mem_read(self.program_counter + 1))
+                }
+
+                AddressingMode::Absolute
+                | AddressingMode::AbsoluteX
+                | AddressingMode::AbsoluteY
+                | AddressingMode::Indirect => format!(
+                    "{:02X} {:02X}",
+                    self.mem_read(self.program_counter + 1),
+                    self.mem_read(self.program_counter + 2)
+                ),
+
+                AddressingMode::Accumulator | AddressingMode::Implied => String::from("     "),
+            };
+
+            let mnemonic: String = format!("{:?}", instruction.mnemonic);
+
+            let memory_value =
+                if instruction.mnemonic == Mnemonic::JMP || instruction.mnemonic == Mnemonic::JSR {
+                    match instruction.addressing_mode {
+                        AddressingMode::Absolute => String::from(""),
+                        AddressingMode::Indirect => {
+                            let addr = self.get_operand_address(&instruction.addressing_mode);
+                            format!(" = {:04X}", addr)
+                        }
+                        _ => {
+                            panic!("invalid opcode");
+                        }
+                    }
+                } else {
+                    match instruction.addressing_mode {
+                        AddressingMode::Immediate
+                        | AddressingMode::Accumulator
+                        | AddressingMode::Implied
+                        | AddressingMode::Relative => String::from(""),
+                        _ => {
+                            let addr = self.get_operand_address(&instruction.addressing_mode);
+                            format!(" = {:02X}", self.mem_read(addr))
+                        }
+                    }
+                };
+
+            let middle = match instruction.addressing_mode {
+                AddressingMode::Immediate => {
+                    format!("#${:02X}", self.mem_read(self.program_counter + 1))
+                }
+                AddressingMode::ZeroPage => {
+                    format!("${:02X}", self.mem_read(self.program_counter + 1))
+                }
+                AddressingMode::ZeroPageX => format!(
+                    "${:02X},X @ {:02X}",
+                    self.mem_read(self.program_counter + 1),
+                    self.get_operand_address(&AddressingMode::ZeroPageX),
+                ),
+                AddressingMode::ZeroPageY => format!(
+                    "${:02X},Y @ {:02X}",
+                    self.mem_read(self.program_counter + 1),
+                    self.get_operand_address(&AddressingMode::ZeroPageY),
+                ),
+                AddressingMode::IndirectX => format!(
+                    "(${:02X},X) @ {:02X} = {:04X}",
+                    self.mem_read(self.program_counter + 1),
+                    self.mem_read(self.program_counter + 1)
+                        .wrapping_add(self.register_x) as u16,
+                    self.get_operand_address(&AddressingMode::IndirectX),
+                ),
+                AddressingMode::IndirectY => format!(
+                    "(${:02X}),Y = {:04X} @ {:04X}",
+                    self.mem_read(self.program_counter + 1),
+                    self.get_operand_address(&AddressingMode::IndirectY)
+                        .wrapping_sub(self.register_y as u16),
+                    self.get_operand_address(&AddressingMode::IndirectY),
+                ),
+                AddressingMode::Relative => format!(
+                    "${:04X}",
+                    self.get_operand_address(&AddressingMode::Relative)
+                ),
+                AddressingMode::Absolute => {
+                    format!("${:04X}", self.mem_read_u16(self.program_counter + 1))
+                }
+                AddressingMode::AbsoluteX => format!(
+                    "${:04X},X @ {:04X}",
+                    self.mem_read_u16(self.program_counter + 1),
+                    self.get_operand_address(&AddressingMode::AbsoluteX),
+                ),
+                AddressingMode::AbsoluteY => format!(
+                    "${:04X},Y @ {:04X}",
+                    self.mem_read_u16(self.program_counter + 1),
+                    self.get_operand_address(&AddressingMode::AbsoluteY),
+                ),
+                AddressingMode::indirect => {
+                    format!("(${:04X})", self.mem_read_u16(self.program_counter + 1))
+                }
+                AddressingMode::Accumulator => String::from("A"),
+                AddressingMode::Implied => String::from(""),
+            } + &memory_value;
+
+            format!(
+                "{:04X}  {:02X} {} {:>4} {:27} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
+                self.program_counter,
+                opcode,
+                operand,
+                mnemonic,
+                middle,
+                self.register_a,
+                self.register_x,
+                self.register_y,
+                self.status,
+                self.stack_pointer
+            )
         }
     }
 
@@ -1483,7 +1617,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1513,7 +1647,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1543,7 +1677,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1659,7 +1793,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1689,7 +1823,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1719,7 +1853,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        assert_eq!(cpu.program_counter, 0x80B0);
     }
 
     #[test]
@@ -1750,7 +1884,7 @@ mod test {
         cpu.reset_and_run();
         assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
         assert_eq!(cpu.stack_pop_u16(), 0x8004);
-        assert!(cpu.get_break_command_flag());
+        assert!(cpu.get_break_flag());
     }
 
     #[test]
@@ -1765,7 +1899,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AD);
+        assert_eq!(cpu.program_counter, 0x80AF);
     }
 
     #[test]
@@ -1795,7 +1929,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
         cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AD);
+        assert_eq!(cpu.program_counter, 0x80AF);
     }
 
     #[test]
@@ -1893,7 +2027,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
-        assert!(!cpu.get_carry_flag());
+        assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
     }
@@ -2043,7 +2177,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
-        assert!(!cpu.get_carry_flag());
+        assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
     }
@@ -2094,7 +2228,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
-        assert!(!cpu.get_carry_flag());
+        assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
     }
@@ -3286,8 +3420,11 @@ mod test {
         assert_eq!(cpu.stack_pop(), 0x00);
         assert_eq!(cpu.stack_pop_u16(), 0x8005);
 
-        // pushed by PHA
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
+        // pushed by PHP
+        assert_eq!(
+            cpu.stack_pop(),
+            CPU::STATUS_NEGATIVE | CPU::STATUS_BREAK | CPU::STATUS_RESERVED
+        );
     }
 
     #[test]
@@ -3342,11 +3479,14 @@ mod test {
         cpu.reset_and_run();
 
         // pushed by BRK
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
+        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE | CPU::STATUS_RESERVED);
         assert_eq!(cpu.stack_pop_u16(), 0x8007);
 
         // pushed by PHP
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
+        assert_eq!(
+            cpu.stack_pop(),
+            CPU::STATUS_NEGATIVE | CPU::STATUS_BREAK | CPU::STATUS_RESERVED
+        );
     }
 
     #[test]
@@ -3586,7 +3726,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
         cpu.reset_and_run();
-        assert_eq!(cpu.status, 0x5D | CPU::STATUS_BREAK_COMMAND);
+        assert_eq!(cpu.status, 0x5D | CPU::STATUS_RESERVED);
         assert_eq!(cpu.register_x, 0xAB);
     }
 
@@ -4245,5 +4385,26 @@ mod test {
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
+    }
+
+    #[test]
+    fn test_nestest() {
+        let mut cpu = CPU::new(Bus::new(Rom::from_file("../nestest.nes").unwrap()));
+
+        cpu.register_a = 0;
+        cpu.register_x = 0;
+        cpu.register_y = 0;
+        cpu.status = 0x24;
+        cpu.stack_pointer = 0xFD;
+        cpu.program_counter = 0xC000;
+
+        let mut lines: Vec<String> = Vec::new();
+
+        cpu.run_with_callback(|cpu| {
+            lines.push(cpu.trace());
+        });
+
+        let actual: String = lines.join("\n") + "\n";
+        let _ = fs::write("nestest-actual.log", actual);
     }
 }
