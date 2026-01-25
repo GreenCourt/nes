@@ -743,6 +743,54 @@ impl CPU {
         self.update_negative_flag(self.register_a);
     }
 
+    fn dcp(&mut self, mode: &AddressingMode) {
+        // (unofficial) DEC then CMP
+        self.dec(mode);
+        self.cmp(mode);
+    }
+
+    fn isb(&mut self, mode: &AddressingMode) {
+        // (unofficial) INC then SBC
+        self.inc(mode);
+        self.sbc(mode);
+    }
+
+    fn lax(&mut self, mode: &AddressingMode) {
+        // (unofficial) LDA then TAX
+        self.lda(mode);
+        self.tax();
+    }
+
+    fn rla(&mut self, mode: &AddressingMode) {
+        // (unofficial) ROL then AND
+        self.rol(mode);
+        self.and(mode);
+    }
+
+    fn rra(&mut self, mode: &AddressingMode) {
+        // (unofficial) ROR then ADC
+        self.ror(mode);
+        self.adc(mode);
+    }
+
+    fn sax(&mut self, mode: &AddressingMode) {
+        // (unofficial) Store Accumulator & X Register
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_a & self.register_x);
+    }
+
+    fn slo(&mut self, mode: &AddressingMode) {
+        // (unofficial) ASL the ORA
+        self.asl(mode);
+        self.ora(mode);
+    }
+
+    fn sre(&mut self, mode: &AddressingMode) {
+        // (unofficial) LSR the EOR
+        self.lsr(mode);
+        self.eor(mode);
+    }
+
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
@@ -814,6 +862,15 @@ impl CPU {
                 Mnemonic::TXA => self.txa(),
                 Mnemonic::TXS => self.txs(),
                 Mnemonic::TYA => self.tya(),
+                // --- unofficial ---
+                Mnemonic::DCP => self.dcp(&instruction.addressing_mode),
+                Mnemonic::ISB => self.isb(&instruction.addressing_mode),
+                Mnemonic::LAX => self.lax(&instruction.addressing_mode),
+                Mnemonic::RLA => self.rla(&instruction.addressing_mode),
+                Mnemonic::RRA => self.rra(&instruction.addressing_mode),
+                Mnemonic::SAX => self.sax(&instruction.addressing_mode),
+                Mnemonic::SLO => self.slo(&instruction.addressing_mode),
+                Mnemonic::SRE => self.sre(&instruction.addressing_mode),
                 _ => panic!("unknown opcode: 0x{:x}", opcode),
             }
 
@@ -884,7 +941,16 @@ mod test {
             };
 
             let mnemonic: String = match instruction.mnemonic {
+                Mnemonic::DCP => String::from("*DCP"),
+                Mnemonic::ISB => String::from("*ISB"),
+                Mnemonic::LAX => String::from("*LAX"),
                 Mnemonic::NOP => String::from(if opcode == 0xEA { "NOP" } else { "*NOP" }),
+                Mnemonic::RLA => String::from("*RLA"),
+                Mnemonic::RRA => String::from("*RRA"),
+                Mnemonic::SAX => String::from("*SAX"),
+                Mnemonic::SBC => String::from(if opcode == 0xEB { "*SBC" } else { "SBC" }),
+                Mnemonic::SLO => String::from("*SLO"),
+                Mnemonic::SRE => String::from("*SRE"),
                 _ => format!("{:?}", instruction.mnemonic),
             };
 
