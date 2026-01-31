@@ -11,15 +11,15 @@ const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A];
 const PRG_ROM_PAGE_SIZE: usize = 16384;
 const CHR_ROM_PAGE_SIZE: usize = 8192;
 
-pub struct Rom {
+pub struct Cartridge {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
     pub mapper: u8,
     pub screen_mirroring: Mirroring,
 }
 
-impl Rom {
-    pub fn new(raw: &Vec<u8>) -> Result<Rom, String> {
+impl Cartridge {
+    pub fn new(raw: &Vec<u8>) -> Result<Cartridge, String> {
         if &raw[0..4] != NES_TAG {
             return Err("File is not in iNES file format".to_string());
         }
@@ -47,7 +47,7 @@ impl Rom {
         let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
-        Ok(Rom {
+        Ok(Cartridge {
             prg_rom: raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec(),
             chr_rom: raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec(),
             mapper: mapper,
@@ -55,9 +55,9 @@ impl Rom {
         })
     }
 
-    pub fn from_file(path: &str) -> Result<Rom, String> {
+    pub fn from_file(path: &str) -> Result<Cartridge, String> {
         let bytes: Vec<u8> = fs::read(path).map_err(|e| e.to_string())?;
-        Rom::new(&bytes)
+        Cartridge::new(&bytes)
     }
 }
 
@@ -65,7 +65,7 @@ impl Rom {
 mod test {
     use super::*;
 
-    impl Rom {
+    impl Cartridge {
         pub fn from_opcodes(ops: &Vec<u8>) -> Self {
             let mut prg_rom = vec![0 as u8; 0xFFFF - 0x8000 + 1];
             for i in 0..ops.len() {
@@ -74,7 +74,7 @@ mod test {
             let reset = 0xFFFC - 0x8000;
             prg_rom[reset] = 0x00;
             prg_rom[reset + 1] = 0x80;
-            Rom {
+            Cartridge {
                 prg_rom: prg_rom,
                 chr_rom: Vec::<u8>::new(),
                 mapper: 0,

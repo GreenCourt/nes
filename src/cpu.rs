@@ -902,7 +902,7 @@ impl CPU {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::cartrige::Rom;
+    use crate::cartridge::Cartridge;
     use std::fs;
 
     impl CPU {
@@ -1209,7 +1209,7 @@ mod test {
     #[test]
     fn test_stack() {
         let ops = vec![Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.stack_push(0x11);
         cpu.stack_push_u16(0x2222);
         cpu.stack_push(0x33);
@@ -1229,7 +1229,7 @@ mod test {
             0x21,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x3B);
         assert!(!cpu.get_carry_flag());
@@ -1247,7 +1247,7 @@ mod test {
             0x01,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_carry_flag());
@@ -1265,7 +1265,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xB3);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x55);
@@ -1286,7 +1286,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0xE3);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x85);
@@ -1306,7 +1306,7 @@ mod test {
             0x16,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x72);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x82);
@@ -1328,7 +1328,7 @@ mod test {
             0x16,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x50);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xA0);
@@ -1350,7 +1350,7 @@ mod test {
             0x17,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17BB, 0x74);
         cpu.reset_and_run();
 
@@ -1372,7 +1372,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x16, 0x1E2B);
         cpu.mem_write(0x1E2B, 0xD8);
         cpu.reset_and_run();
@@ -1395,7 +1395,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x12, 0x1B2B);
         cpu.mem_write(0x1B2F, 0xD8);
         cpu.reset_and_run();
@@ -1416,7 +1416,7 @@ mod test {
             0b1011_1001,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1001_1001);
         assert!(!cpu.get_zero_flag());
@@ -1432,7 +1432,7 @@ mod test {
             0b1011_1100,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
@@ -1448,7 +1448,7 @@ mod test {
             0x87,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b1011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_1100);
@@ -1467,7 +1467,7 @@ mod test {
             0x83,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b1011_1100);
         cpu.reset_and_run();
 
@@ -1486,7 +1486,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1AE1, 0b1011_1100);
         cpu.reset_and_run();
 
@@ -1507,7 +1507,7 @@ mod test {
             0x18,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x18E1, 0b1011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1010_1100);
@@ -1527,7 +1527,7 @@ mod test {
             0x0E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0EE1, 0b1011_1100);
         cpu.reset_and_run();
 
@@ -1547,7 +1547,7 @@ mod test {
             0xDC,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CF7, 0b1011_1100);
         cpu.reset_and_run();
@@ -1567,7 +1567,7 @@ mod test {
             0xE1,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x0CF7);
         cpu.mem_write(0x0CFC, 0b1011_1100);
         cpu.reset_and_run();
@@ -1585,7 +1585,7 @@ mod test {
             Opcode::ASL_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         assert_eq!(cpu.register_a, 0b1111_1010);
@@ -1602,7 +1602,7 @@ mod test {
             Opcode::ASL_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
@@ -1613,7 +1613,7 @@ mod test {
     #[test]
     fn test_asl_zeropage() {
         let ops = vec![Opcode::ASL_ZeroPage as u8, 0x5A, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5A, 0b0010_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x5A), 0b0100_0000);
@@ -1631,7 +1631,7 @@ mod test {
             0x5A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5D, 0b1001_0010);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x5D), 0b0010_0100);
@@ -1648,7 +1648,7 @@ mod test {
             0x1B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1B5D, 0b0101_0010);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1B5D), 0b1010_0100);
@@ -1667,7 +1667,7 @@ mod test {
             0x1B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1B5D, 0b0001_0110);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1B5D), 0b0010_1100);
@@ -1686,7 +1686,7 @@ mod test {
             0x0A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8010);
     }
@@ -1701,7 +1701,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1716,7 +1716,7 @@ mod test {
             0x0B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8011);
     }
@@ -1731,7 +1731,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1746,7 +1746,7 @@ mod test {
             0x0C,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8012);
     }
@@ -1761,7 +1761,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1775,7 +1775,7 @@ mod test {
             0xAD,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0010_0011);
         cpu.reset_and_run();
         assert!(!cpu.get_zero_flag());
@@ -1792,7 +1792,7 @@ mod test {
             0xAD,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0010_0011);
         cpu.reset_and_run();
         assert!(cpu.get_zero_flag());
@@ -1809,7 +1809,7 @@ mod test {
             0xAD,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0110_0011);
         cpu.reset_and_run();
         assert!(!cpu.get_zero_flag());
@@ -1826,7 +1826,7 @@ mod test {
             0xAD,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b1010_0011);
         cpu.reset_and_run();
         assert!(!cpu.get_zero_flag());
@@ -1844,7 +1844,7 @@ mod test {
             0x0D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0DBD, 0b1110_0011);
         cpu.reset_and_run();
         assert!(!cpu.get_zero_flag());
@@ -1862,7 +1862,7 @@ mod test {
             0x0D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8013);
     }
@@ -1877,7 +1877,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1892,7 +1892,7 @@ mod test {
             0x0E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8014);
     }
@@ -1907,7 +1907,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1922,7 +1922,7 @@ mod test {
             0x0F,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8015);
     }
@@ -1937,7 +1937,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8006);
     }
@@ -1951,7 +1951,7 @@ mod test {
             Opcode::NOP_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
         assert_eq!(cpu.stack_pop_u16(), 0x8004);
@@ -1967,7 +1967,7 @@ mod test {
             0x09,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x800E);
@@ -1982,7 +1982,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8005);
@@ -1997,7 +1997,7 @@ mod test {
             0x08,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x800D);
@@ -2012,7 +2012,7 @@ mod test {
             0xAA,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x8005);
@@ -2025,7 +2025,7 @@ mod test {
             Opcode::CLC_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(!cpu.get_carry_flag());
     }
@@ -2037,7 +2037,7 @@ mod test {
             Opcode::CLD_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(!cpu.get_decimal_mode_flag());
     }
@@ -2049,7 +2049,7 @@ mod test {
             Opcode::CLI_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(!cpu.get_interrupt_disable_flag());
     }
@@ -2064,7 +2064,7 @@ mod test {
             Opcode::CLV_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0110_0011);
         cpu.reset_and_run();
         assert!(!cpu.get_overflow_flag());
@@ -2079,7 +2079,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -2095,7 +2095,7 @@ mod test {
             0x9D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2114,7 +2114,7 @@ mod test {
             0x9D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA0, 0x81);
         cpu.reset_and_run();
         assert!(!cpu.get_carry_flag());
@@ -2132,7 +2132,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A12, 0x11);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2152,7 +2152,7 @@ mod test {
             0x19,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19A0, 0x10);
         cpu.reset_and_run();
         assert!(!cpu.get_carry_flag());
@@ -2172,7 +2172,7 @@ mod test {
             0x19,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19A0, 0x10);
         cpu.reset_and_run();
         assert!(!cpu.get_carry_flag());
@@ -2191,7 +2191,7 @@ mod test {
             0x76,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x79, 0x12BD);
         cpu.mem_write(0x12BD, 0x10);
         cpu.reset_and_run();
@@ -2211,7 +2211,7 @@ mod test {
             0x79,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x79, 0x12BD);
         cpu.mem_write(0x12C0, 0x10);
         cpu.reset_and_run();
@@ -2229,7 +2229,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -2245,7 +2245,7 @@ mod test {
             0x9D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2263,7 +2263,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A41, 0x11);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2280,7 +2280,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -2296,7 +2296,7 @@ mod test {
             0x9D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2314,7 +2314,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A41, 0x11);
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
@@ -2325,7 +2325,7 @@ mod test {
     #[test]
     fn test_dec_zeropage() {
         let ops = vec![Opcode::DEC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x11);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0x10);
@@ -2336,7 +2336,7 @@ mod test {
     #[test]
     fn test_dec_zeroflag() {
         let ops = vec![Opcode::DEC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x01);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0x00);
@@ -2353,7 +2353,7 @@ mod test {
             0x3e,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x00);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0xFF);
@@ -2369,7 +2369,7 @@ mod test {
             0x07,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x07AE, 0xD7);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x07AE), 0xD6);
@@ -2387,7 +2387,7 @@ mod test {
             0x1D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1DAE, 0xD7);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1DAE), 0xD6);
@@ -2403,7 +2403,7 @@ mod test {
             Opcode::DEX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x04);
         assert!(!cpu.get_zero_flag());
@@ -2418,7 +2418,7 @@ mod test {
             Opcode::DEX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
@@ -2433,7 +2433,7 @@ mod test {
             Opcode::DEX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0xFF);
         assert!(!cpu.get_zero_flag());
@@ -2448,7 +2448,7 @@ mod test {
             Opcode::DEY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x04);
         assert!(!cpu.get_zero_flag());
@@ -2463,7 +2463,7 @@ mod test {
             Opcode::DEY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
@@ -2478,7 +2478,7 @@ mod test {
             Opcode::DEY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0xFF);
         assert!(!cpu.get_zero_flag());
@@ -2494,7 +2494,7 @@ mod test {
             0b1101_0011,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
@@ -2510,7 +2510,7 @@ mod test {
             0b1001_0110,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
@@ -2526,7 +2526,7 @@ mod test {
             0xA2,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA2, 0b0101_0011);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1100_0101);
@@ -2545,7 +2545,7 @@ mod test {
             0x9E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA2, 0b1101_0011);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0100_0101);
@@ -2563,7 +2563,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12A2, 0b0101_0011);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1100_0101);
@@ -2583,7 +2583,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12A2, 0b1101_0011);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0100_0101);
@@ -2603,7 +2603,7 @@ mod test {
             0x1E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1EA2, 0b1101_0011);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0100_0101);
@@ -2622,7 +2622,7 @@ mod test {
             0x92,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xA2, 0x15E7);
         cpu.mem_write(0x15E7, 0b1101_0011);
         cpu.reset_and_run();
@@ -2642,7 +2642,7 @@ mod test {
             0xA2,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xA2, 0x15E2);
         cpu.mem_write(0x15E7, 0b1101_0011);
         cpu.reset_and_run();
@@ -2654,7 +2654,7 @@ mod test {
     #[test]
     fn test_inc_zeropage() {
         let ops = vec![Opcode::INC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x11);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0x12);
@@ -2665,7 +2665,7 @@ mod test {
     #[test]
     fn test_inc_zeroflag() {
         let ops = vec![Opcode::INC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0xFF);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0x00);
@@ -2682,7 +2682,7 @@ mod test {
             0x3e,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0xF0);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x41), 0xF1);
@@ -2698,7 +2698,7 @@ mod test {
             0x07,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x07AE, 0xD7);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x07AE), 0xD8);
@@ -2716,7 +2716,7 @@ mod test {
             0x0A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0AAE, 0xD7);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x0AAE), 0xD8);
@@ -2732,7 +2732,7 @@ mod test {
             Opcode::INX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x06);
         assert!(!cpu.get_zero_flag());
@@ -2747,7 +2747,7 @@ mod test {
             Opcode::INX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
@@ -2762,7 +2762,7 @@ mod test {
             Opcode::INX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0xFB);
         assert!(!cpu.get_zero_flag());
@@ -2777,7 +2777,7 @@ mod test {
             Opcode::INY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x06);
         assert!(!cpu.get_zero_flag());
@@ -2792,7 +2792,7 @@ mod test {
             Opcode::INY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
@@ -2807,7 +2807,7 @@ mod test {
             Opcode::INY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0xF5);
         assert!(!cpu.get_zero_flag());
@@ -2822,7 +2822,7 @@ mod test {
             0x18,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x18AD, Opcode::BRK_Implied as u8);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x18AE);
@@ -2836,7 +2836,7 @@ mod test {
             0x18,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x18B1, 0x80AD);
         cpu.reset_and_run();
         assert_eq!(cpu.program_counter, 0x80AE);
@@ -2858,7 +2858,7 @@ mod test {
             0x33,
             Opcode::RTS_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         assert_eq!(cpu.program_counter, 0x8006);
@@ -2873,7 +2873,7 @@ mod test {
     #[test]
     fn test_lda_immediate() {
         let ops = vec![Opcode::LDA_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x1A);
         assert!(!cpu.get_zero_flag());
@@ -2889,7 +2889,7 @@ mod test {
             0x00,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_zero_flag());
@@ -2899,7 +2899,7 @@ mod test {
     #[test]
     fn test_lda_zeropage() {
         let ops = vec![Opcode::LDA_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xF4);
@@ -2916,7 +2916,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0x56);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x56);
@@ -2932,7 +2932,7 @@ mod test {
             0x14,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1425, 0x61);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x61);
@@ -2950,7 +2950,7 @@ mod test {
             0x1B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1B35, 0x21);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x21);
@@ -2968,7 +2968,7 @@ mod test {
             0x0D,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0D45, 0x28);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x28);
@@ -2985,7 +2985,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
         cpu.mem_write_u16(0x1634, 0x55);
@@ -3004,7 +3004,7 @@ mod test {
             0x83,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x83, 0x54);
         cpu.mem_write_u16(0x84, 0x16);
         cpu.mem_write_u16(0x1658, 0x57);
@@ -3017,7 +3017,7 @@ mod test {
     #[test]
     fn test_ldx_immediate() {
         let ops = vec![Opcode::LDX_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x1A);
         assert!(!cpu.get_zero_flag());
@@ -3033,7 +3033,7 @@ mod test {
             0x00,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
@@ -3043,7 +3043,7 @@ mod test {
     #[test]
     fn test_ldx_zeropage() {
         let ops = vec![Opcode::LDX_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0xF4);
@@ -3060,7 +3060,7 @@ mod test {
             0x13,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19, 0x57);
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x06);
@@ -3077,7 +3077,7 @@ mod test {
             0x14,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1425, 0x61);
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x61);
@@ -3095,7 +3095,7 @@ mod test {
             0x14,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1445, 0x28);
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x28);
@@ -3106,7 +3106,7 @@ mod test {
     #[test]
     fn test_ldy_immediate() {
         let ops = vec![Opcode::LDY_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x1A);
         assert!(!cpu.get_zero_flag());
@@ -3122,7 +3122,7 @@ mod test {
             0x00,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
@@ -3132,7 +3132,7 @@ mod test {
     #[test]
     fn test_ldy_zeropage() {
         let ops = vec![Opcode::LDY_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0xF4);
@@ -3149,7 +3149,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0x56);
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x56);
@@ -3165,7 +3165,7 @@ mod test {
             0x0E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0E25, 0x61);
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x61);
@@ -3183,7 +3183,7 @@ mod test {
             0x0C,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0C35, 0x21);
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0x21);
@@ -3199,7 +3199,7 @@ mod test {
             Opcode::LSR_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0011_1110);
         assert!(cpu.get_carry_flag());
@@ -3215,7 +3215,7 @@ mod test {
             Opcode::LSR_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
@@ -3226,7 +3226,7 @@ mod test {
     #[test]
     fn test_lsr_zeropage() {
         let ops = vec![Opcode::LSR_ZeroPage as u8, 0x7E, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x7E), 0b0000_0100);
@@ -3244,7 +3244,7 @@ mod test {
             0x5A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5D, 0b0110_0000);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x5D), 0b0011_0000);
@@ -3261,7 +3261,7 @@ mod test {
             0x1E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E12, 0b0110_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1E12), 0b0011_0100);
@@ -3280,7 +3280,7 @@ mod test {
             0x1E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E12, 0b0110_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1E12), 0b0011_0100);
@@ -3298,7 +3298,7 @@ mod test {
             0b1011_1001,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1011_1101);
         assert!(!cpu.get_zero_flag());
@@ -3314,7 +3314,7 @@ mod test {
             0b0000_0000,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
@@ -3330,7 +3330,7 @@ mod test {
             0x87,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b0011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0111_1101);
@@ -3349,7 +3349,7 @@ mod test {
             0x83,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b0011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0111_1101);
@@ -3367,7 +3367,7 @@ mod test {
             0x17,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b0011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0111_1101);
@@ -3387,7 +3387,7 @@ mod test {
             0x17,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b1011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1111_1101);
@@ -3407,7 +3407,7 @@ mod test {
             0x17,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b0011_1100);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0111_1101);
@@ -3426,7 +3426,7 @@ mod test {
             0xDC,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CF7, 0b1011_1100);
         cpu.reset_and_run();
@@ -3446,7 +3446,7 @@ mod test {
             0xE1,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CFC, 0b1011_1100);
         cpu.reset_and_run();
@@ -3463,7 +3463,7 @@ mod test {
             Opcode::PHA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         // pushed by BRK
@@ -3484,7 +3484,7 @@ mod test {
             0x02,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         // pushed by BRK
@@ -3509,7 +3509,7 @@ mod test {
             Opcode::PLA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
@@ -3527,7 +3527,7 @@ mod test {
             Opcode::PLA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_zero_flag());
@@ -3546,7 +3546,7 @@ mod test {
             Opcode::PHP_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         // pushed by BRK
@@ -3568,7 +3568,7 @@ mod test {
             Opcode::ROL_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b1111_1010);
         assert!(!cpu.get_carry_flag());
@@ -3584,7 +3584,7 @@ mod test {
             Opcode::ROL_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
@@ -3602,7 +3602,7 @@ mod test {
             0x7E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x7E), 0b0001_0011);
@@ -3623,7 +3623,7 @@ mod test {
             0x7B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x7E), 0b0001_0011);
@@ -3640,7 +3640,7 @@ mod test {
             0x18,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1832, 0b1100_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1832), 0b1001_0010);
@@ -3659,7 +3659,7 @@ mod test {
             0x1E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E32, 0b1100_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1E32), 0b1001_0010);
@@ -3676,7 +3676,7 @@ mod test {
             Opcode::ROR_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0111_1110);
         assert!(cpu.get_carry_flag());
@@ -3692,7 +3692,7 @@ mod test {
             Opcode::ROR_Accumulator as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
@@ -3710,7 +3710,7 @@ mod test {
             0x7E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0010_1000);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x7E), 0b1001_0100);
@@ -3731,7 +3731,7 @@ mod test {
             0x7B,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x7E), 0b1000_0100);
@@ -3748,7 +3748,7 @@ mod test {
             0x0E,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0E32, 0b1100_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x0E32), 0b01100100);
@@ -3767,7 +3767,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A32, 0b1100_1001);
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x1A32), 0b01100100);
@@ -3795,7 +3795,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.status, 0x5D | CPU::STATUS_RESERVED);
         assert_eq!(cpu.register_x, 0xAB);
@@ -3810,7 +3810,7 @@ mod test {
             0xF0,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xFF);
         assert!(!cpu.get_carry_flag());
@@ -3828,7 +3828,7 @@ mod test {
             0xFE,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_carry_flag());
@@ -3849,7 +3849,7 @@ mod test {
             0xBB,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xBB, 0x12);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x90);
@@ -3870,7 +3870,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0xE3);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xBE);
@@ -3890,7 +3890,7 @@ mod test {
             0x16,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x06);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x09);
@@ -3912,7 +3912,7 @@ mod test {
             0x16,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x30);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x1F);
@@ -3934,7 +3934,7 @@ mod test {
             0x17,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17BB, 0x50);
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x4F);
@@ -3958,7 +3958,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x16, 0x132B);
         cpu.mem_write(0x132B, 0x51);
         cpu.reset_and_run();
@@ -3980,7 +3980,7 @@ mod test {
             0x12,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x12, 0x132B);
         cpu.mem_write(0x132F, 0x50);
         cpu.reset_and_run();
@@ -3994,7 +3994,7 @@ mod test {
     #[test]
     fn test_sec_implied() {
         let ops = vec![Opcode::SEC_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_carry_flag());
     }
@@ -4002,7 +4002,7 @@ mod test {
     #[test]
     fn test_sed_implied() {
         let ops = vec![Opcode::SED_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_decimal_mode_flag());
     }
@@ -4010,7 +4010,7 @@ mod test {
     #[test]
     fn test_sei_implied() {
         let ops = vec![Opcode::SEI_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert!(cpu.get_interrupt_disable_flag());
     }
@@ -4024,7 +4024,7 @@ mod test {
             0x1a,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x3D);
         assert_eq!(cpu.mem_read(0x1a), 0x3D);
@@ -4041,7 +4041,7 @@ mod test {
             0x1A,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x3E);
         assert_eq!(cpu.mem_read(0x4B), 0x3E);
@@ -4057,7 +4057,7 @@ mod test {
             0x07,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x3C);
         assert_eq!(cpu.mem_read(0x071A), 0x3C);
@@ -4075,7 +4075,7 @@ mod test {
             0x02,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x3B);
         assert_eq!(cpu.mem_read(0x022C), 0x3B);
@@ -4093,7 +4093,7 @@ mod test {
             0x03,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0x35);
         assert_eq!(cpu.mem_read(0x032D), 0x35);
@@ -4110,7 +4110,7 @@ mod test {
             0x87,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
         cpu.reset_and_run();
@@ -4129,7 +4129,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
         cpu.reset_and_run();
@@ -4146,7 +4146,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x80), 0x17);
     }
@@ -4162,7 +4162,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x84), 0x17);
     }
@@ -4177,7 +4177,7 @@ mod test {
             0x03,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x03A3), 0x17);
     }
@@ -4191,7 +4191,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x80), 0x17);
     }
@@ -4207,7 +4207,7 @@ mod test {
             0x80,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x91), 0x17);
     }
@@ -4222,7 +4222,7 @@ mod test {
             0x07,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.mem_read(0x076A), 0x17);
     }
@@ -4235,7 +4235,7 @@ mod test {
             Opcode::TAX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 10);
         assert!(!cpu.get_zero_flag());
@@ -4245,7 +4245,7 @@ mod test {
     #[test]
     fn test_tax_zeroflag() {
         let ops = vec![Opcode::TAX_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0);
         assert!(cpu.get_zero_flag());
@@ -4260,7 +4260,7 @@ mod test {
             Opcode::TAX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0xFA);
         assert!(!cpu.get_zero_flag());
@@ -4275,7 +4275,7 @@ mod test {
             Opcode::TAY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 10);
         assert!(!cpu.get_zero_flag());
@@ -4285,7 +4285,7 @@ mod test {
     #[test]
     fn test_tay_zeroflag() {
         let ops = vec![Opcode::TAY_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0);
         assert!(cpu.get_zero_flag());
@@ -4300,7 +4300,7 @@ mod test {
             Opcode::TAY_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_y, 0xFA);
         assert!(!cpu.get_zero_flag());
@@ -4318,7 +4318,7 @@ mod test {
             Opcode::TSX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x0A);
         assert!(!cpu.get_zero_flag());
@@ -4334,7 +4334,7 @@ mod test {
             Opcode::TSX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
@@ -4352,7 +4352,7 @@ mod test {
             Opcode::TSX_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_x, 0xF2);
         assert!(!cpu.get_zero_flag());
@@ -4367,7 +4367,7 @@ mod test {
             Opcode::TXA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 10);
         assert!(!cpu.get_zero_flag());
@@ -4377,7 +4377,7 @@ mod test {
     #[test]
     fn test_txa_zeroflag() {
         let ops = vec![Opcode::TXA_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0);
         assert!(cpu.get_zero_flag());
@@ -4392,7 +4392,7 @@ mod test {
             Opcode::TXA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
@@ -4407,7 +4407,7 @@ mod test {
             Opcode::TXS_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         // pop values pushed by BRK
@@ -4425,7 +4425,7 @@ mod test {
             Opcode::TYA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
 
         assert_eq!(cpu.register_a, 10);
@@ -4436,7 +4436,7 @@ mod test {
     #[test]
     fn test_tya_zeroflag() {
         let ops = vec![Opcode::TYA_Implied as u8, Opcode::BRK_Implied as u8];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0);
         assert!(cpu.get_zero_flag());
@@ -4451,7 +4451,7 @@ mod test {
             Opcode::TYA_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
-        let mut cpu = CPU::new(Bus::new(Rom::from_opcodes(&ops)));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.reset_and_run();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
@@ -4460,7 +4460,7 @@ mod test {
 
     #[test]
     fn test_nestest() {
-        let mut cpu = CPU::new(Bus::new(Rom::from_file("../nestest.nes").unwrap()));
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_file("../nestest.nes").unwrap()));
 
         cpu.register_a = 0;
         cpu.register_x = 0;
