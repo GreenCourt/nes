@@ -47,11 +47,11 @@ impl PPU {
             register_data: 0,
             register_oam_dma: 0,
             latch: false,
-            chr_rom: chr_rom,
+            chr_rom,
             palette: [0; 32],
             vram: [0; 2048],
             _oam: [0; 256],
-            mirroring: mirroring,
+            mirroring,
         }
     }
 

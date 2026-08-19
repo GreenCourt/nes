@@ -38,7 +38,7 @@ impl CPU {
             status: 0,
             stack_pointer: 0,
             program_counter: 0,
-            bus: bus,
+            bus,
         }
     }
 
@@ -65,9 +65,9 @@ impl CPU {
 
     fn update_zero_flag(&mut self, result: u8) {
         if result == 0 {
-            self.status = self.status | CPU::STATUS_ZERO;
+            self.status |= CPU::STATUS_ZERO;
         } else {
-            self.status = self.status & !CPU::STATUS_ZERO;
+            self.status &= !CPU::STATUS_ZERO;
         }
     }
 
@@ -117,9 +117,9 @@ impl CPU {
 
     fn update_negative_flag(&mut self, result: u8) {
         if result & 0b1000_0000 != 0 {
-            self.status = self.status | CPU::STATUS_NEGATIVE;
+            self.status |= CPU::STATUS_NEGATIVE;
         } else {
-            self.status = self.status & !CPU::STATUS_NEGATIVE;
+            self.status &= !CPU::STATUS_NEGATIVE;
         }
     }
 
@@ -171,43 +171,38 @@ impl CPU {
             AddressingMode::ZeroPageX => {
                 let pos = self.mem_read(self.program_counter + 1);
                 // wrap as u8, then cast to u16
-                let addr = pos.wrapping_add(self.register_x) as u16;
-                addr
+                pos.wrapping_add(self.register_x) as u16
             }
 
             AddressingMode::ZeroPageY => {
                 let pos = self.mem_read(self.program_counter + 1);
                 // wrap as u8, then cast to u16
-                let addr = pos.wrapping_add(self.register_y) as u16;
-                addr
+                pos.wrapping_add(self.register_y) as u16
             }
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter + 1),
 
             AddressingMode::AbsoluteX => {
                 let base = self.mem_read_u16(self.program_counter + 1);
                 // wrap as u16
-                let addr = base.wrapping_add(self.register_x as u16);
-                addr
+                base.wrapping_add(self.register_x as u16)
             }
 
             AddressingMode::AbsoluteY => {
                 let base = self.mem_read_u16(self.program_counter + 1);
                 // wrap as u16
-                let addr = base.wrapping_add(self.register_y as u16);
-                addr
+                base.wrapping_add(self.register_y as u16)
             }
 
             AddressingMode::Indirect => {
                 let ptr = self.mem_read_u16(self.program_counter + 1);
-                let addr = if ptr & 0x00FF == 0x00FF {
+                if ptr & 0x00FF == 0x00FF {
                     // https://forums.nesdev.org/viewtopic.php?t=19140
                     let lo = self.mem_read(ptr) as u16;
                     let hi = self.mem_read(ptr & 0xFF00) as u16;
                     (hi << 8) | lo
                 } else {
                     self.mem_read_u16(ptr)
-                };
-                addr
+                }
             }
 
             AddressingMode::IndirectX => {
@@ -230,8 +225,7 @@ impl CPU {
                 ) as u16;
 
                 let base = (hi << 8) | lo; // this is different to mem_read_u16 because of wrapping
-                let addr = base.wrapping_add(self.register_y as u16);
-                addr
+                base.wrapping_add(self.register_y as u16)
             }
 
             AddressingMode::Relative => {

@@ -34,7 +34,7 @@ impl Bus {
         addr -= ROM_START;
         if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
             // mirror
-            addr = addr % 0x4000;
+            addr %= 0x4000;
         }
         self.prg_rom[addr as usize]
     }
