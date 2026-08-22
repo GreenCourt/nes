@@ -20,6 +20,7 @@ pub struct PPU {
 
     scanline: u16,
     cycles: usize,
+    pub nmi_interrupt: Option<u8>,
 }
 
 #[derive(Default)]
@@ -27,19 +28,6 @@ struct ScrollRegister {
     x: u8,
     y: u8,
 }
-
-const _CTRL_NAMETABLE1: u8 = 0b0000_0001;
-const _CTRL_NAMETABLE2: u8 = 0b0000_0010;
-const CTRL_VRAM_ADD_INCREMENT: u8 = 0b0000_0100;
-const _CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
-const _CTRL_BACKROUND_PATTERN_ADDR: u8 = 0b0001_0000;
-const _CTRL_SPRITE_SIZE: u8 = 0b0010_0000;
-const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
-const CTRL_GENERATE_NMI: u8 = 0b1000_0000;
-
-const _SPRITE_OVERFLOW: u8 = 0b0010_0000;
-const _SPRITE_0HIT: u8 = 0b0100_0000;
-const STATUS_VBLANK: u8 = 0b1000_0000;
 
 impl PPU {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -61,8 +49,22 @@ impl PPU {
             mirroring,
             cycles: 0,
             scanline: 0,
+            nmi_interrupt: None,
         }
     }
+
+    const _CTRL_NAMETABLE1: u8 = 0b0000_0001;
+    const _CTRL_NAMETABLE2: u8 = 0b0000_0010;
+    const CTRL_VRAM_ADD_INCREMENT: u8 = 0b0000_0100;
+    const _CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
+    const _CTRL_BACKROUND_PATTERN_ADDR: u8 = 0b0001_0000;
+    const _CTRL_SPRITE_SIZE: u8 = 0b0010_0000;
+    const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
+    const CTRL_GENERATE_NMI: u8 = 0b1000_0000;
+
+    const _STATUS_SPRITE_OVERFLOW: u8 = 0b0010_0000;
+    const STATUS_SPRITE_ZERO_HIT: u8 = 0b0100_0000;
+    const STATUS_VBLANK: u8 = 0b1000_0000;
 
     pub fn read_register(&mut self, addr: u16) -> u8 {
         match addr {
@@ -81,7 +83,14 @@ impl PPU {
     pub fn write_register(&mut self, addr: u16, data: u8) {
         match addr {
             0x2000 => {
+                let nmi = self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0;
                 self.register_ctrl = data;
+                if !nmi
+                    && (self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0)
+                    && (self.register_status & PPU::STATUS_VBLANK != 0)
+                {
+                    self.nmi_interrupt = Some(1);
+                }
             }
             0x2001 => {
                 self.register_mask = data;
@@ -124,7 +133,7 @@ impl PPU {
     }
 
     fn increment_addr_register(&mut self) {
-        let inc: u16 = if (self.register_ctrl & CTRL_VRAM_ADD_INCREMENT) != 0 {
+        let inc: u16 = if (self.register_ctrl & PPU::CTRL_VRAM_ADD_INCREMENT) != 0 {
             32
         } else {
             1
@@ -172,16 +181,26 @@ impl PPU {
             self.cycles -= 341;
             self.scanline += 1;
 
-            if self.scanline == 241 && (self.register_ctrl & CTRL_GENERATE_NMI != 0) {
-                self.register_status |= STATUS_VBLANK;
-                todo!("NMI interrupt");
+            if self.scanline == 241 {
+                self.register_status |= PPU::STATUS_VBLANK;
+                self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
+
+                if self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0 {
+                    self.nmi_interrupt = Some(1);
+                }
             }
 
             if self.scanline >= 262 {
                 self.scanline = 0;
-                self.register_status &= !STATUS_VBLANK;
+                self.nmi_interrupt = None;
+                self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
+                self.register_status &= !PPU::STATUS_VBLANK;
             }
         }
+    }
+
+    pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
+        self.nmi_interrupt.take()
     }
 }
 
@@ -239,7 +258,7 @@ mod test {
         assert!(!ppu.latch);
         assert_eq!(ppu.register_addr, 0x1123);
 
-        ppu.register_ctrl |= CTRL_VRAM_ADD_INCREMENT;
+        ppu.register_ctrl |= PPU::CTRL_VRAM_ADD_INCREMENT;
 
         ppu.increment_addr_register();
         assert!(!ppu.latch);

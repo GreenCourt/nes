@@ -823,6 +823,17 @@ impl CPU {
         self.eor(mode, true);
     }
 
+    fn interrupt_nmi(&mut self) {
+        self.stack_push_u16(self.program_counter);
+        let mut status = self.status;
+        status &= !CPU::STATUS_BREAK;
+        status &= !CPU::STATUS_RESERVED;
+        self.stack_push(status);
+        self.status |= CPU::STATUS_INTERRUPT_DISABLE;
+        self.bus.tick(2);
+        self.program_counter = self.mem_read_u16(0xFFFA);
+    }
+
     pub fn run(&mut self) {
         self.run_with_callback(|_| {});
     }
@@ -832,6 +843,10 @@ impl CPU {
         F: FnMut(&mut CPU),
     {
         loop {
+            if let Some(_nmi) = self.bus.poll_nmi_interrupt() {
+                self.interrupt_nmi();
+            }
+
             callback(self);
             let opcode = self.mem_read(self.program_counter);
             let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
