@@ -17,6 +17,9 @@ pub struct PPU {
     vram: [u8; 2048],
     _oam: [u8; 256],
     mirroring: Mirroring,
+
+    scanline: u16,
+    cycles: usize,
 }
 
 #[derive(Default)]
@@ -32,7 +35,11 @@ const _CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
 const _CTRL_BACKROUND_PATTERN_ADDR: u8 = 0b0001_0000;
 const _CTRL_SPRITE_SIZE: u8 = 0b0010_0000;
 const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
-const _CTRL_GENERATE_NMI: u8 = 0b1000_0000;
+const CTRL_GENERATE_NMI: u8 = 0b1000_0000;
+
+const _SPRITE_OVERFLOW: u8 = 0b0010_0000;
+const _SPRITE_0HIT: u8 = 0b0100_0000;
+const STATUS_VBLANK: u8 = 0b1000_0000;
 
 impl PPU {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
@@ -52,6 +59,8 @@ impl PPU {
             vram: [0; 2048],
             _oam: [0; 256],
             mirroring,
+            cycles: 0,
+            scanline: 0,
         }
     }
 
@@ -156,11 +165,38 @@ impl PPU {
             _ => vram_index,
         }
     }
+
+    pub fn tick(&mut self, cycles: u8) {
+        self.cycles += cycles as usize;
+        if self.cycles >= 341 {
+            self.cycles -= 341;
+            self.scanline += 1;
+
+            if self.scanline == 241 && (self.register_ctrl & CTRL_GENERATE_NMI != 0) {
+                self.register_status |= STATUS_VBLANK;
+                todo!("NMI interrupt");
+            }
+
+            if self.scanline >= 262 {
+                self.scanline = 0;
+                self.register_status &= !STATUS_VBLANK;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+
+    impl PPU {
+        pub fn get_scanline(&self) -> u16 {
+            self.scanline
+        }
+        pub fn get_cycles(&self) -> usize {
+            self.cycles
+        }
+    }
 
     #[test]
     fn test_latch() {

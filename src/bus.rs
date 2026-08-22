@@ -19,6 +19,7 @@ pub struct Bus {
     cpu_ram: [u8; 2048],
     ppu: PPU,
     prg_rom: Vec<u8>,
+    cycles: usize,
 }
 
 impl Bus {
@@ -27,6 +28,7 @@ impl Bus {
             cpu_ram: [0; 2048],
             ppu: PPU::new(cartridge.chr_rom, cartridge.screen_mirroring),
             prg_rom: cartridge.prg_rom,
+            cycles: 0,
         }
     }
 
@@ -37,6 +39,11 @@ impl Bus {
             addr %= 0x4000;
         }
         self.prg_rom[addr as usize]
+    }
+
+    pub fn tick(&mut self, cycles: u8) {
+        self.cycles += cycles as usize;
+        self.ppu.tick(cycles * 3);
     }
 }
 
@@ -90,5 +97,21 @@ impl Mem for Bus {
         let lo = (data & 0xff) as u8;
         self.mem_write(pos, lo);
         self.mem_write(pos.wrapping_add(1), hi);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    impl Bus {
+        pub fn get_cycles(&self) -> usize {
+            self.cycles
+        }
+        pub fn get_ppu_scanline(&self) -> u16 {
+            self.ppu.get_scanline()
+        }
+        pub fn get_ppu_cycles(&self) -> usize {
+            self.ppu.get_cycles()
+        }
     }
 }
