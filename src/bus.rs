@@ -59,17 +59,17 @@ impl Mem for Bus {
     fn mem_read(&mut self, addr: u16) -> u8 {
         match addr {
             RAM_START..=RAM_MIRROS_END => {
-                let mirror_down_addr = addr & 0b00000111_11111111;
+                let mirror_down_addr = addr & 0x7FF;
                 self.cpu_ram[mirror_down_addr as usize]
             }
-            PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END | 0x4014 => {
-                let mirror_down_addr = addr & 0b00100000_00000111;
+            PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
+                let mirror_down_addr = addr & 0x2007;
                 self.ppu.read_register(mirror_down_addr)
             }
             ROM_START..=ROM_END => self.read_prg_rom(addr),
             _ => {
-                println!("Ignoring mem access at 0x{:X}", addr);
-                todo!("out-of-range addr 0x{:X}", addr);
+                //println!("Ignoring mem access at 0x{:X}", addr);
+                0 // TODO: dummy
             }
         }
     }
@@ -83,19 +83,19 @@ impl Mem for Bus {
     fn mem_write(&mut self, addr: u16, data: u8) {
         match addr {
             RAM_START..=RAM_MIRROS_END => {
-                let mirror_down_addr = addr & 0b00000111_11111111;
+                let mirror_down_addr = addr & 0x7FF;
                 self.cpu_ram[mirror_down_addr as usize] = data;
             }
-            PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END | 0x4014 => {
-                let mirror_down_addr = addr & 0b00100000_00000111;
+            PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
+                let mirror_down_addr = addr & 0x2007;
                 self.ppu.write_register(mirror_down_addr, data);
             }
             ROM_START..=ROM_END => {
                 panic!("Attempt to write to Cartridge ROM space");
             }
             _ => {
+                // TODO
                 println!("Ignoring mem write-access at 0x{:X}", addr);
-                todo!("out-of-range addr 0x{:X}", addr);
             }
         }
     }
@@ -121,16 +121,16 @@ mod test {
         pub fn mem_peek(&self, addr: u16) -> u8 {
             match addr {
                 RAM_START..=RAM_MIRROS_END => {
-                    let mirror_down_addr = addr & 0b00000111_11111111;
+                    let mirror_down_addr = addr & 0x7FF;
                     self.cpu_ram[mirror_down_addr as usize]
                 }
-                PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END | 0x4014 => {
-                    let mirror_down_addr = addr & 0b00100000_00000111;
+                PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
+                    let mirror_down_addr = addr & 0x2007;
                     self.ppu.peek_register(mirror_down_addr)
                 }
                 ROM_START..=ROM_END => self.read_prg_rom(addr),
                 _ => {
-                    0 // dummy
+                    0 // TODO: dummy
                 }
             }
         }

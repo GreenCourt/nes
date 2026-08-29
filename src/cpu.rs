@@ -954,7 +954,7 @@ mod test {
         fn reset_and_run_while_brk(&mut self) {
             self.reset();
             loop {
-                let opcode = self.mem_read(self.program_counter);
+                let opcode = self.bus.mem_peek(self.program_counter);
                 if opcode == Opcode::BRK_Implied as u8 {
                     return;
                 }
