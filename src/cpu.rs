@@ -35,9 +35,9 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
-            stack_pointer: 0,
-            program_counter: 0,
+            status: CPU::STATUS_INTERRUPT_DISABLE | CPU::STATUS_RESERVED,
+            stack_pointer: 0xFD,
+            program_counter: 0x0000,
             bus,
         }
     }
@@ -91,18 +91,6 @@ impl CPU {
         };
     }
 
-    fn set_break_flag(&mut self, flag: bool) {
-        if flag {
-            self.status |= CPU::STATUS_BREAK;
-        } else {
-            self.status &= !CPU::STATUS_BREAK;
-        };
-    }
-
-    fn get_break_flag(&self) -> bool {
-        (self.status & CPU::STATUS_BREAK) != 0
-    }
-
     fn set_overflow_flag(&mut self, flag: bool) {
         if flag {
             self.status |= CPU::STATUS_OVERFLOW;
@@ -152,14 +140,9 @@ impl CPU {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
-        self.status = 0;
+        self.status = CPU::STATUS_INTERRUPT_DISABLE | CPU::STATUS_RESERVED;
         self.stack_pointer = 0xFD;
         self.program_counter = self.mem_read_u16(0xFFFC);
-    }
-
-    pub fn reset_and_run(&mut self) {
-        self.reset();
-        self.run()
     }
 
     fn get_operand_address(&mut self, mode: &AddressingMode) -> (u16, bool) {
@@ -362,9 +345,10 @@ impl CPU {
     fn brk(&mut self) {
         //  Force Interrupt
         self.stack_push_u16(self.program_counter);
-        self.stack_push(self.status);
-        // TODO the IRQ interrupt vector at $FFFE/F is loaded into the PC
-        self.set_break_flag(true);
+        self.stack_push(self.status | CPU::STATUS_RESERVED | CPU::STATUS_BREAK);
+        self.set_interrupt_disable_flag(true);
+        self.bus.tick(1);
+        self.program_counter = self.mem_read_u16(0xFFFE);
     }
 
     fn bvc(&mut self) {
@@ -827,124 +811,115 @@ impl CPU {
         self.stack_push_u16(self.program_counter);
         let mut status = self.status;
         status &= !CPU::STATUS_BREAK;
-        status &= !CPU::STATUS_RESERVED;
+        status |= CPU::STATUS_RESERVED;
         self.stack_push(status);
         self.status |= CPU::STATUS_INTERRUPT_DISABLE;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
     }
 
-    pub fn run(&mut self) {
-        self.run_with_callback(|_| {});
-    }
+    pub fn execute_single_instruction(&mut self) -> usize {
+        let cycles_before = self.bus.get_cycles();
 
-    pub fn run_with_callback<F>(&mut self, mut callback: F)
-    where
-        F: FnMut(&mut CPU),
-    {
-        loop {
-            if let Some(_nmi) = self.bus.poll_nmi_interrupt() {
-                self.interrupt_nmi();
-            }
-
-            callback(self);
-            let opcode = self.mem_read(self.program_counter);
-            let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
-            let program_counter_before = self.program_counter;
-
-            match instruction.mnemonic {
-                Mnemonic::ADC => self.adc(&instruction.addressing_mode, false),
-                Mnemonic::AND => self.and(&instruction.addressing_mode, false),
-                Mnemonic::ASL => self.asl(&instruction.addressing_mode),
-                Mnemonic::BCC => self.bcc(),
-                Mnemonic::BCS => self.bcs(),
-                Mnemonic::BEQ => self.beq(),
-                Mnemonic::BIT => self.bit(&instruction.addressing_mode),
-                Mnemonic::BMI => self.bmi(),
-                Mnemonic::BNE => self.bne(),
-                Mnemonic::BPL => self.bpl(),
-                Mnemonic::BRK => self.brk(),
-                Mnemonic::BVC => self.bvc(),
-                Mnemonic::BVS => self.bvs(),
-                Mnemonic::CLC => self.clc(),
-                Mnemonic::CLD => self.cld(),
-                Mnemonic::CLI => self.cli(),
-                Mnemonic::CLV => self.clv(),
-                Mnemonic::CMP => self.cmp(&instruction.addressing_mode, false),
-                Mnemonic::CPX => self.cpx(&instruction.addressing_mode),
-                Mnemonic::CPY => self.cpy(&instruction.addressing_mode),
-                Mnemonic::DEC => self.dec(&instruction.addressing_mode),
-                Mnemonic::DEX => self.dex(),
-                Mnemonic::DEY => self.dey(),
-                Mnemonic::EOR => self.eor(&instruction.addressing_mode, false),
-                Mnemonic::INC => self.inc(&instruction.addressing_mode),
-                Mnemonic::INX => self.inx(),
-                Mnemonic::INY => self.iny(),
-                Mnemonic::JMP => self.jmp(&instruction.addressing_mode),
-                Mnemonic::JSR => self.jsr(),
-                Mnemonic::LDA => self.lda(&instruction.addressing_mode),
-                Mnemonic::LDX => self.ldx(&instruction.addressing_mode),
-                Mnemonic::LDY => self.ldy(&instruction.addressing_mode),
-                Mnemonic::LSR => self.lsr(&instruction.addressing_mode),
-                Mnemonic::NOP => self.nop(&instruction.addressing_mode),
-                Mnemonic::ORA => self.ora(&instruction.addressing_mode, false),
-                Mnemonic::PHA => self.pha(),
-                Mnemonic::PHP => self.php(),
-                Mnemonic::PLA => self.pla(),
-                Mnemonic::PLP => self.plp(),
-                Mnemonic::ROL => self.rol(&instruction.addressing_mode),
-                Mnemonic::ROR => self.ror(&instruction.addressing_mode),
-                Mnemonic::RTI => self.rti(),
-                Mnemonic::RTS => self.rts(),
-                Mnemonic::SBC => self.sbc(&instruction.addressing_mode, false),
-                Mnemonic::SEC => self.sec(),
-                Mnemonic::SED => self.sed(),
-                Mnemonic::SEI => self.sei(),
-                Mnemonic::STA => self.sta(&instruction.addressing_mode),
-                Mnemonic::STX => self.stx(&instruction.addressing_mode),
-                Mnemonic::STY => self.sty(&instruction.addressing_mode),
-                Mnemonic::TAX => self.tax(),
-                Mnemonic::TAY => self.tay(),
-                Mnemonic::TSX => self.tsx(),
-                Mnemonic::TXA => self.txa(),
-                Mnemonic::TXS => self.txs(),
-                Mnemonic::TYA => self.tya(),
-                // --- unofficial ---
-                Mnemonic::DCP => self.dcp(&instruction.addressing_mode),
-                Mnemonic::ISB => self.isb(&instruction.addressing_mode),
-                Mnemonic::LAX => self.lax(&instruction.addressing_mode),
-                Mnemonic::RLA => self.rla(&instruction.addressing_mode),
-                Mnemonic::RRA => self.rra(&instruction.addressing_mode),
-                Mnemonic::SAX => self.sax(&instruction.addressing_mode),
-                Mnemonic::SLO => self.slo(&instruction.addressing_mode),
-                Mnemonic::SRE => self.sre(&instruction.addressing_mode),
-                _ => panic!("unknown opcode: 0x{:x}", opcode),
-            }
-
-            self.bus.tick(instruction.cycles);
-
-            if self.program_counter == program_counter_before {
-                self.program_counter += match instruction.addressing_mode {
-                    AddressingMode::Accumulator => 1,
-                    AddressingMode::Immediate => 2,
-                    AddressingMode::ZeroPage => 2,
-                    AddressingMode::ZeroPageX => 2,
-                    AddressingMode::ZeroPageY => 2,
-                    AddressingMode::Absolute => 3,
-                    AddressingMode::AbsoluteX => 3,
-                    AddressingMode::AbsoluteY => 3,
-                    AddressingMode::Indirect => 3,
-                    AddressingMode::IndirectX => 2,
-                    AddressingMode::IndirectY => 2,
-                    AddressingMode::Relative => 2,
-                    AddressingMode::Implied => 1,
-                };
-            }
-
-            if self.get_break_flag() {
-                break;
-            }
+        if let Some(_nmi) = self.bus.poll_nmi_interrupt() {
+            self.interrupt_nmi();
         }
+
+        let opcode = self.mem_read(self.program_counter);
+        let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
+        let program_counter_before = self.program_counter;
+
+        match instruction.mnemonic {
+            Mnemonic::ADC => self.adc(&instruction.addressing_mode, false),
+            Mnemonic::AND => self.and(&instruction.addressing_mode, false),
+            Mnemonic::ASL => self.asl(&instruction.addressing_mode),
+            Mnemonic::BCC => self.bcc(),
+            Mnemonic::BCS => self.bcs(),
+            Mnemonic::BEQ => self.beq(),
+            Mnemonic::BIT => self.bit(&instruction.addressing_mode),
+            Mnemonic::BMI => self.bmi(),
+            Mnemonic::BNE => self.bne(),
+            Mnemonic::BPL => self.bpl(),
+            Mnemonic::BRK => self.brk(),
+            Mnemonic::BVC => self.bvc(),
+            Mnemonic::BVS => self.bvs(),
+            Mnemonic::CLC => self.clc(),
+            Mnemonic::CLD => self.cld(),
+            Mnemonic::CLI => self.cli(),
+            Mnemonic::CLV => self.clv(),
+            Mnemonic::CMP => self.cmp(&instruction.addressing_mode, false),
+            Mnemonic::CPX => self.cpx(&instruction.addressing_mode),
+            Mnemonic::CPY => self.cpy(&instruction.addressing_mode),
+            Mnemonic::DEC => self.dec(&instruction.addressing_mode),
+            Mnemonic::DEX => self.dex(),
+            Mnemonic::DEY => self.dey(),
+            Mnemonic::EOR => self.eor(&instruction.addressing_mode, false),
+            Mnemonic::INC => self.inc(&instruction.addressing_mode),
+            Mnemonic::INX => self.inx(),
+            Mnemonic::INY => self.iny(),
+            Mnemonic::JMP => self.jmp(&instruction.addressing_mode),
+            Mnemonic::JSR => self.jsr(),
+            Mnemonic::LDA => self.lda(&instruction.addressing_mode),
+            Mnemonic::LDX => self.ldx(&instruction.addressing_mode),
+            Mnemonic::LDY => self.ldy(&instruction.addressing_mode),
+            Mnemonic::LSR => self.lsr(&instruction.addressing_mode),
+            Mnemonic::NOP => self.nop(&instruction.addressing_mode),
+            Mnemonic::ORA => self.ora(&instruction.addressing_mode, false),
+            Mnemonic::PHA => self.pha(),
+            Mnemonic::PHP => self.php(),
+            Mnemonic::PLA => self.pla(),
+            Mnemonic::PLP => self.plp(),
+            Mnemonic::ROL => self.rol(&instruction.addressing_mode),
+            Mnemonic::ROR => self.ror(&instruction.addressing_mode),
+            Mnemonic::RTI => self.rti(),
+            Mnemonic::RTS => self.rts(),
+            Mnemonic::SBC => self.sbc(&instruction.addressing_mode, false),
+            Mnemonic::SEC => self.sec(),
+            Mnemonic::SED => self.sed(),
+            Mnemonic::SEI => self.sei(),
+            Mnemonic::STA => self.sta(&instruction.addressing_mode),
+            Mnemonic::STX => self.stx(&instruction.addressing_mode),
+            Mnemonic::STY => self.sty(&instruction.addressing_mode),
+            Mnemonic::TAX => self.tax(),
+            Mnemonic::TAY => self.tay(),
+            Mnemonic::TSX => self.tsx(),
+            Mnemonic::TXA => self.txa(),
+            Mnemonic::TXS => self.txs(),
+            Mnemonic::TYA => self.tya(),
+            // --- unofficial ---
+            Mnemonic::DCP => self.dcp(&instruction.addressing_mode),
+            Mnemonic::ISB => self.isb(&instruction.addressing_mode),
+            Mnemonic::LAX => self.lax(&instruction.addressing_mode),
+            Mnemonic::RLA => self.rla(&instruction.addressing_mode),
+            Mnemonic::RRA => self.rra(&instruction.addressing_mode),
+            Mnemonic::SAX => self.sax(&instruction.addressing_mode),
+            Mnemonic::SLO => self.slo(&instruction.addressing_mode),
+            Mnemonic::SRE => self.sre(&instruction.addressing_mode),
+            _ => panic!("unknown opcode: 0x{:x}", opcode),
+        }
+
+        self.bus.tick(instruction.cycles);
+
+        if self.program_counter == program_counter_before {
+            self.program_counter += match instruction.addressing_mode {
+                AddressingMode::Accumulator => 1,
+                AddressingMode::Immediate => 2,
+                AddressingMode::ZeroPage => 2,
+                AddressingMode::ZeroPageX => 2,
+                AddressingMode::ZeroPageY => 2,
+                AddressingMode::Absolute => 3,
+                AddressingMode::AbsoluteX => 3,
+                AddressingMode::AbsoluteY => 3,
+                AddressingMode::Indirect => 3,
+                AddressingMode::IndirectX => 2,
+                AddressingMode::IndirectY => 2,
+                AddressingMode::Relative => 2,
+                AddressingMode::Implied => 1,
+            };
+        }
+
+        // return elapsed cycles
+        self.bus.get_cycles().wrapping_sub(cycles_before)
     }
 }
 
@@ -962,6 +937,29 @@ mod test {
 
         fn get_decimal_mode_flag(&mut self) -> bool {
             (self.status & CPU::STATUS_DECIMAL_MODE) != 0
+        }
+
+        fn _set_break_flag(&mut self, flag: bool) {
+            if flag {
+                self.status |= CPU::STATUS_BREAK;
+            } else {
+                self.status &= !CPU::STATUS_BREAK;
+            };
+        }
+
+        fn get_break_flag(&self) -> bool {
+            (self.status & CPU::STATUS_BREAK) != 0
+        }
+
+        fn reset_and_run_while_brk(&mut self) {
+            self.reset();
+            loop {
+                let opcode = self.mem_read(self.program_counter);
+                if opcode == Opcode::BRK_Implied as u8 {
+                    return;
+                }
+                self.execute_single_instruction();
+            }
         }
 
         fn trace(&mut self) -> String {
@@ -1284,7 +1282,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x3B);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -1302,7 +1300,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -1321,7 +1319,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xB3);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x55);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -1342,7 +1340,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0xE3);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x85);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -1362,7 +1360,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x72);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x82);
         assert!(!cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -1384,7 +1382,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x50);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xA0);
         assert!(!cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -1406,7 +1404,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17BB, 0x74);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0x85);
         assert!(!cpu.get_carry_flag());
@@ -1429,7 +1427,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x16, 0x1E2B);
         cpu.mem_write(0x1E2B, 0xD8);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0x7A);
         assert!(cpu.get_carry_flag());
@@ -1452,7 +1450,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x12, 0x1B2B);
         cpu.mem_write(0x1B2F, 0xD8);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0x7A);
         assert!(cpu.get_carry_flag());
@@ -1471,7 +1469,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1001_1001);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -1487,7 +1485,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -1504,7 +1502,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_1100);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -1523,7 +1521,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0b0000_1100);
         assert!(!cpu.get_zero_flag());
@@ -1542,7 +1540,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1AE1, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0b0010_1100);
         assert!(!cpu.get_zero_flag());
@@ -1563,7 +1561,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x18E1, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1010_1100);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -1583,7 +1581,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0EE1, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0b0011_1100);
         assert!(!cpu.get_zero_flag());
@@ -1604,7 +1602,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CF7, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0011_1100);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -1624,7 +1622,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x0CF7);
         cpu.mem_write(0x0CFC, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0b0011_1100);
         assert!(!cpu.get_zero_flag());
@@ -1640,7 +1638,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 0b1111_1010);
         assert!(!cpu.get_carry_flag());
@@ -1657,7 +1655,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
@@ -1669,7 +1667,7 @@ mod test {
         let ops = vec![Opcode::ASL_ZeroPage as u8, 0x5A, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5A, 0b0010_0000);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x5A), 0b0100_0000);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -1687,7 +1685,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5D, 0b1001_0010);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x5D), 0b0010_0100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -1704,7 +1702,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1B5D, 0b0101_0010);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1B5D), 0b1010_0100);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -1723,7 +1721,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1B5D, 0b0001_0110);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1B5D), 0b0010_1100);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -1741,8 +1739,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8010);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x800F);
     }
 
     #[test]
@@ -1756,8 +1754,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
@@ -1771,8 +1769,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8011);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8010);
     }
 
     #[test]
@@ -1786,8 +1784,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
@@ -1801,8 +1799,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8012);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8011);
     }
 
     #[test]
@@ -1816,8 +1814,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
@@ -1831,7 +1829,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0010_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_overflow_flag());
         assert!(!cpu.get_negative_flag());
@@ -1848,7 +1846,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0010_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_overflow_flag());
         assert!(!cpu.get_negative_flag());
@@ -1865,7 +1863,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0110_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_overflow_flag());
         assert!(!cpu.get_negative_flag());
@@ -1882,7 +1880,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b1010_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_overflow_flag());
         assert!(cpu.get_negative_flag());
@@ -1900,7 +1898,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0DBD, 0b1110_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_overflow_flag());
         assert!(cpu.get_negative_flag());
@@ -1917,8 +1915,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8013);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8012);
     }
 
     #[test]
@@ -1932,8 +1930,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
@@ -1947,8 +1945,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8014);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8013);
     }
 
     #[test]
@@ -1962,8 +1960,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
@@ -1977,8 +1975,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8015);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8014);
     }
 
     #[test]
@@ -1992,24 +1990,35 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8006);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8005);
     }
 
     #[test]
     fn test_brk_implied() {
-        let ops = vec![
+        let mut ops = vec![
             Opcode::LDA_Immediate as u8,
             0xF0,
             Opcode::NOP_Implied as u8,
             Opcode::NOP_Implied as u8,
             Opcode::BRK_Implied as u8,
         ];
+        ops.resize(0xFFFF - 0x8000 + 1, Opcode::BRK_Implied as u8);
+        ops[0xFFFE - 0x8000] = 0x81;
+        ops[0xFFFF - 0x8000] = 0xAD;
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
+        cpu.reset_and_run_while_brk();
+        cpu.execute_single_instruction(); // execute 0x8004 == BRK_Implied
+        assert_eq!(
+            cpu.stack_pop(),
+            CPU::STATUS_NEGATIVE
+                | CPU::STATUS_RESERVED
+                | CPU::STATUS_BREAK
+                | CPU::STATUS_INTERRUPT_DISABLE
+        );
         assert_eq!(cpu.stack_pop_u16(), 0x8004);
-        assert!(cpu.get_break_flag());
+        assert!(!cpu.get_break_flag());
+        assert_eq!(cpu.program_counter, 0xAD81);
     }
 
     #[test]
@@ -2023,8 +2032,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x800E);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x800D);
     }
 
     #[test]
@@ -2038,8 +2047,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8005);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8004);
     }
 
     #[test]
@@ -2053,8 +2062,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b0100_0000);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x800D);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x800C);
     }
 
     #[test]
@@ -2068,8 +2077,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xCC, 0b1000_0000);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x8005);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x8004);
     }
 
     #[test]
@@ -2080,7 +2089,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
     }
 
@@ -2092,7 +2101,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_decimal_mode_flag());
     }
 
@@ -2104,7 +2113,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_interrupt_disable_flag());
     }
 
@@ -2120,7 +2129,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xAD, 0b0110_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_overflow_flag());
     }
 
@@ -2134,7 +2143,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2151,7 +2160,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2170,7 +2179,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA0, 0x81);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2188,7 +2197,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A12, 0x11);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2208,7 +2217,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19A0, 0x10);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2228,7 +2237,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19A0, 0x10);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2248,7 +2257,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x79, 0x12BD);
         cpu.mem_write(0x12BD, 0x10);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2268,7 +2277,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x79, 0x12BD);
         cpu.mem_write(0x12C0, 0x10);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2284,7 +2293,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2301,7 +2310,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2319,7 +2328,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A41, 0x11);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2335,7 +2344,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2352,7 +2361,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x9D, 0x71);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2370,7 +2379,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A41, 0x11);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2381,7 +2390,7 @@ mod test {
         let ops = vec![Opcode::DEC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x11);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0x10);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2392,7 +2401,7 @@ mod test {
         let ops = vec![Opcode::DEC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x01);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2409,7 +2418,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x00);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0xFF);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2425,7 +2434,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x07AE, 0xD7);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x07AE), 0xD6);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2443,7 +2452,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1DAE, 0xD7);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1DAE), 0xD6);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2458,7 +2467,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x04);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2473,7 +2482,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2488,7 +2497,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0xFF);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2503,7 +2512,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x04);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2518,7 +2527,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2533,7 +2542,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0xFF);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2549,7 +2558,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2565,7 +2574,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2582,7 +2591,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA2, 0b0101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2601,7 +2610,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xA2, 0b1101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2619,7 +2628,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12A2, 0b0101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2639,7 +2648,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12A2, 0b1101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2659,7 +2668,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1EA2, 0b1101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2679,7 +2688,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xA2, 0x15E7);
         cpu.mem_write(0x15E7, 0b1101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2699,7 +2708,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xA2, 0x15E2);
         cpu.mem_write(0x15E7, 0b1101_0011);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0100_0101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2710,7 +2719,7 @@ mod test {
         let ops = vec![Opcode::INC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0x11);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0x12);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2721,7 +2730,7 @@ mod test {
         let ops = vec![Opcode::INC_ZeroPage as u8, 0x41, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0xFF);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2738,7 +2747,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x41, 0xF0);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x41), 0xF1);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2754,7 +2763,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x07AE, 0xD7);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x07AE), 0xD8);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2772,7 +2781,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0AAE, 0xD7);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x0AAE), 0xD8);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2787,7 +2796,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x06);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2802,7 +2811,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2817,7 +2826,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0xFB);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2832,7 +2841,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x06);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2847,7 +2856,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2862,7 +2871,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0xF5);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2878,8 +2887,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x18AD, Opcode::BRK_Implied as u8);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x18AE);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x18AD);
     }
 
     #[test]
@@ -2892,8 +2901,8 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x18B1, 0x80AD);
-        cpu.reset_and_run();
-        assert_eq!(cpu.program_counter, 0x80AE);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.program_counter, 0x80AD);
     }
 
     #[test]
@@ -2913,22 +2922,18 @@ mod test {
             Opcode::RTS_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
-        assert_eq!(cpu.program_counter, 0x8006);
+        assert_eq!(cpu.program_counter, 0x8005);
         assert_eq!(cpu.register_a, 0xF5);
         assert_eq!(cpu.register_x, 0x12);
-
-        // pushed by BRK
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
-        assert_eq!(cpu.stack_pop_u16(), 0x8005);
     }
 
     #[test]
     fn test_lda_immediate() {
         let ops = vec![Opcode::LDA_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x1A);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2944,7 +2949,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2955,7 +2960,7 @@ mod test {
         let ops = vec![Opcode::LDA_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xF4);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -2972,7 +2977,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0x56);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x56);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -2988,7 +2993,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1425, 0x61);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x61);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3006,7 +3011,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1B35, 0x21);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x21);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3024,7 +3029,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0D45, 0x28);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x28);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3043,7 +3048,7 @@ mod test {
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
         cpu.mem_write_u16(0x1634, 0x55);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x55);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3062,7 +3067,7 @@ mod test {
         cpu.mem_write_u16(0x83, 0x54);
         cpu.mem_write_u16(0x84, 0x16);
         cpu.mem_write_u16(0x1658, 0x57);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x57);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3072,7 +3077,7 @@ mod test {
     fn test_ldx_immediate() {
         let ops = vec![Opcode::LDX_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x1A);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3088,7 +3093,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3099,7 +3104,7 @@ mod test {
         let ops = vec![Opcode::LDX_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0xF4);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3116,7 +3121,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x19, 0x57);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x06);
         assert_eq!(cpu.register_x, 0x57);
         assert!(!cpu.get_zero_flag());
@@ -3133,7 +3138,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1425, 0x61);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x61);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3151,7 +3156,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x1445, 0x28);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x28);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3161,7 +3166,7 @@ mod test {
     fn test_ldy_immediate() {
         let ops = vec![Opcode::LDY_Immediate as u8, 0x1A, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x1A);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3177,7 +3182,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3188,7 +3193,7 @@ mod test {
         let ops = vec![Opcode::LDY_ZeroPage as u8, 0x12, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x12, 0xF4);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0xF4);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3205,7 +3210,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0x56);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x56);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3221,7 +3226,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0E25, 0x61);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x61);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3239,7 +3244,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x0C35, 0x21);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0x21);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3254,7 +3259,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0011_1110);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3270,7 +3275,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
@@ -3282,7 +3287,7 @@ mod test {
         let ops = vec![Opcode::LSR_ZeroPage as u8, 0x7E, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x7E), 0b0000_0100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3300,7 +3305,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x5D, 0b0110_0000);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x5D), 0b0011_0000);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3317,7 +3322,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E12, 0b0110_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1E12), 0b0011_0100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3336,7 +3341,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E12, 0b0110_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1E12), 0b0011_0100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3353,7 +3358,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1011_1101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3369,7 +3374,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3386,7 +3391,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b0011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3405,7 +3410,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x87, 0b0011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3423,7 +3428,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b0011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3443,7 +3448,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3463,7 +3468,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17E1, 0b0011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3483,7 +3488,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CF7, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3503,7 +3508,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0xE1, 0x1CF7);
         cpu.mem_write(0x1CFC, 0b1011_1100);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1111_1101);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3518,11 +3523,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-
-        // pushed by BRK
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE);
-        assert_eq!(cpu.stack_pop_u16(), 0x8003);
+        cpu.reset_and_run_while_brk();
 
         // pushed by PHA
         assert_eq!(cpu.stack_pop(), 0xFA);
@@ -3539,16 +3540,15 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-
-        // pushed by BRK
-        assert_eq!(cpu.stack_pop(), 0x00);
-        assert_eq!(cpu.stack_pop_u16(), 0x8005);
+        cpu.reset_and_run_while_brk();
 
         // pushed by PHP
         assert_eq!(
             cpu.stack_pop(),
-            CPU::STATUS_NEGATIVE | CPU::STATUS_BREAK | CPU::STATUS_RESERVED
+            CPU::STATUS_NEGATIVE
+                | CPU::STATUS_BREAK
+                | CPU::STATUS_RESERVED
+                | CPU::STATUS_INTERRUPT_DISABLE
         );
     }
 
@@ -3564,7 +3564,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -3582,7 +3582,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -3601,16 +3601,15 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-
-        // pushed by BRK
-        assert_eq!(cpu.stack_pop(), CPU::STATUS_NEGATIVE | CPU::STATUS_RESERVED);
-        assert_eq!(cpu.stack_pop_u16(), 0x8007);
+        cpu.reset_and_run_while_brk();
 
         // pushed by PHP
         assert_eq!(
             cpu.stack_pop(),
-            CPU::STATUS_NEGATIVE | CPU::STATUS_BREAK | CPU::STATUS_RESERVED
+            CPU::STATUS_NEGATIVE
+                | CPU::STATUS_BREAK
+                | CPU::STATUS_RESERVED
+                | CPU::STATUS_INTERRUPT_DISABLE
         );
     }
 
@@ -3623,7 +3622,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b1111_1010);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3639,7 +3638,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
@@ -3658,7 +3657,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x7E), 0b0001_0011);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3679,7 +3678,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x7E), 0b0001_0011);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3696,7 +3695,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1832, 0b1100_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1832), 0b1001_0010);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3715,7 +3714,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1E32, 0b1100_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1E32), 0b1001_0010);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3731,7 +3730,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0111_1110);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3747,7 +3746,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_zero_flag());
@@ -3766,7 +3765,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0010_1000);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x7E), 0b1001_0100);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3787,7 +3786,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x7E, 0b0000_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x7E), 0b1000_0100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3804,7 +3803,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x0E32, 0b1100_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x0E32), 0b01100100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3823,7 +3822,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x1A32, 0b1100_1001);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x1A32), 0b01100100);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_zero_flag());
@@ -3840,7 +3839,7 @@ mod test {
             0x80,
             Opcode::PHA_Implied as u8,
             Opcode::LDA_Immediate as u8,
-            0x5D,
+            0x4D,
             Opcode::PHA_Implied as u8,
             Opcode::LDX_Immediate as u8,
             0xAB,
@@ -3850,8 +3849,8 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-        assert_eq!(cpu.status, 0x5D | CPU::STATUS_RESERVED);
+        cpu.reset_and_run_while_brk();
+        assert_eq!(cpu.status, 0x4D | CPU::STATUS_RESERVED);
         assert_eq!(cpu.register_x, 0xAB);
     }
 
@@ -3865,7 +3864,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xFF);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3883,7 +3882,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x00);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3905,7 +3904,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0xBB, 0x12);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x90);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3926,7 +3925,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16, 0xE3);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xBE);
         assert!(!cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3946,7 +3945,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x06);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x09);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3968,7 +3967,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x16AB, 0x30);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x1F);
         assert!(cpu.get_carry_flag());
         assert!(!cpu.get_overflow_flag());
@@ -3990,7 +3989,7 @@ mod test {
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write(0x17BB, 0x50);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x4F);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -4015,7 +4014,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x16, 0x132B);
         cpu.mem_write(0x132B, 0x51);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x4F);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -4037,7 +4036,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x12, 0x132B);
         cpu.mem_write(0x132F, 0x50);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x4F);
         assert!(cpu.get_carry_flag());
         assert!(cpu.get_overflow_flag());
@@ -4049,7 +4048,7 @@ mod test {
     fn test_sec_implied() {
         let ops = vec![Opcode::SEC_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_carry_flag());
     }
 
@@ -4057,7 +4056,7 @@ mod test {
     fn test_sed_implied() {
         let ops = vec![Opcode::SED_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_decimal_mode_flag());
     }
 
@@ -4065,7 +4064,7 @@ mod test {
     fn test_sei_implied() {
         let ops = vec![Opcode::SEI_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert!(cpu.get_interrupt_disable_flag());
     }
 
@@ -4079,7 +4078,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x3D);
         assert_eq!(cpu.mem_read(0x1a), 0x3D);
     }
@@ -4096,7 +4095,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x3E);
         assert_eq!(cpu.mem_read(0x4B), 0x3E);
     }
@@ -4112,7 +4111,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x3C);
         assert_eq!(cpu.mem_read(0x071A), 0x3C);
     }
@@ -4130,7 +4129,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x3B);
         assert_eq!(cpu.mem_read(0x022C), 0x3B);
     }
@@ -4148,7 +4147,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x35);
         assert_eq!(cpu.mem_read(0x032D), 0x35);
     }
@@ -4167,7 +4166,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x32);
         assert_eq!(cpu.mem_read(0x1637), 0x32);
     }
@@ -4186,7 +4185,7 @@ mod test {
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
         cpu.mem_write_u16(0x87, 0x34);
         cpu.mem_write_u16(0x88, 0x16);
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0x35);
         assert_eq!(cpu.mem_read(0x1634), 0x35);
     }
@@ -4201,7 +4200,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x80), 0x17);
     }
 
@@ -4217,7 +4216,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x84), 0x17);
     }
 
@@ -4232,7 +4231,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x03A3), 0x17);
     }
 
@@ -4246,7 +4245,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x80), 0x17);
     }
 
@@ -4262,7 +4261,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x91), 0x17);
     }
 
@@ -4277,7 +4276,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.mem_read(0x076A), 0x17);
     }
 
@@ -4290,7 +4289,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 10);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4300,7 +4299,7 @@ mod test {
     fn test_tax_zeroflag() {
         let ops = vec![Opcode::TAX_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4315,7 +4314,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -4330,7 +4329,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 10);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4340,7 +4339,7 @@ mod test {
     fn test_tay_zeroflag() {
         let ops = vec![Opcode::TAY_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4355,7 +4354,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_y, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -4373,7 +4372,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x0A);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4389,7 +4388,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0x00);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4407,7 +4406,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_x, 0xF2);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -4422,7 +4421,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 10);
         assert!(!cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4432,7 +4431,7 @@ mod test {
     fn test_txa_zeroflag() {
         let ops = vec![Opcode::TXA_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4447,7 +4446,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -4462,12 +4461,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
-
-        // pop values pushed by BRK
-        cpu.stack_pop();
-        cpu.stack_pop_u16();
-
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.stack_pointer, 0x0a);
     }
 
@@ -4480,7 +4474,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
 
         assert_eq!(cpu.register_a, 10);
         assert!(!cpu.get_zero_flag());
@@ -4491,7 +4485,7 @@ mod test {
     fn test_tya_zeroflag() {
         let ops = vec![Opcode::TYA_Implied as u8, Opcode::BRK_Implied as u8];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0);
         assert!(cpu.get_zero_flag());
         assert!(!cpu.get_negative_flag());
@@ -4506,7 +4500,7 @@ mod test {
             Opcode::BRK_Implied as u8,
         ];
         let mut cpu = CPU::new(Bus::new(Cartridge::from_opcodes(&ops)));
-        cpu.reset_and_run();
+        cpu.reset_and_run_while_brk();
         assert_eq!(cpu.register_a, 0xFA);
         assert!(!cpu.get_zero_flag());
         assert!(cpu.get_negative_flag());
@@ -4529,13 +4523,18 @@ mod test {
 
         let mut actual_lines: Vec<String> = Vec::new();
 
-        cpu.run_with_callback(|cpu| {
+        loop {
             actual_lines.push(cpu.trace());
             if cpu.program_counter == 0xC689 {
                 // TODO: currently, break because APU is not implemented
-                cpu.set_break_flag(true);
+                break;
             }
-        });
+            let opcode = cpu.mem_read(cpu.program_counter);
+            if opcode == Opcode::BRK_Implied as u8 {
+                return;
+            }
+            cpu.execute_single_instruction();
+        }
 
         let expected_lines: Vec<String> =
             BufReader::new(fs::File::open("test_rom/nestest.log").unwrap())

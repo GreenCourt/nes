@@ -49,6 +49,10 @@ impl Bus {
     pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
         self.ppu.poll_nmi_interrupt()
     }
+
+    pub fn get_cycles(&self) -> usize {
+        self.cycles
+    }
 }
 
 impl Mem for Bus {
@@ -108,9 +112,6 @@ impl Mem for Bus {
 mod test {
     use super::*;
     impl Bus {
-        pub fn get_cycles(&self) -> usize {
-            self.cycles
-        }
         pub fn get_ppu_scanline(&self) -> u16 {
             self.ppu.get_scanline()
         }
