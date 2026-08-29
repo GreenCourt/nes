@@ -118,5 +118,26 @@ mod test {
         pub fn get_ppu_cycles(&self) -> usize {
             self.ppu.get_cycles()
         }
+        pub fn mem_peek(&self, addr: u16) -> u8 {
+            match addr {
+                RAM_START..=RAM_MIRROS_END => {
+                    let mirror_down_addr = addr & 0b00000111_11111111;
+                    self.cpu_ram[mirror_down_addr as usize]
+                }
+                PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END | 0x4014 => {
+                    let mirror_down_addr = addr & 0b00100000_00000111;
+                    self.ppu.peek_register(mirror_down_addr)
+                }
+                ROM_START..=ROM_END => self.read_prg_rom(addr),
+                _ => {
+                    0 // dummy
+                }
+            }
+        }
+        pub fn mem_peek_u16(&self, pos: u16) -> u16 {
+            let lo = self.mem_peek(pos) as u16;
+            let hi = self.mem_peek(pos.wrapping_add(1)) as u16;
+            (hi << 8) | lo
+        }
     }
 }

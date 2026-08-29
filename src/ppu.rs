@@ -12,6 +12,8 @@ pub struct PPU {
     register_oam_dma: u8,            // $4014 - OAM_DMA (write)
     latch: bool,                     // shared by PPU_SCROLL and PPU_ADDR
 
+    open_bus_value: u8,
+
     chr_rom: Vec<u8>,
     palette: [u8; 32],
     vram: [u8; 2048],
@@ -42,6 +44,7 @@ impl PPU {
             register_data: 0,
             register_oam_dma: 0,
             latch: false,
+            open_bus_value: 0,
             chr_rom,
             palette: [0; 32],
             vram: [0; 2048],
@@ -57,7 +60,7 @@ impl PPU {
     const _CTRL_NAMETABLE2: u8 = 0b0000_0010;
     const CTRL_VRAM_ADD_INCREMENT: u8 = 0b0000_0100;
     const _CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
-    const _CTRL_BACKROUND_PATTERN_ADDR: u8 = 0b0001_0000;
+    const _CTRL_BACKGROUND_PATTERN_ADDR: u8 = 0b0001_0000;
     const _CTRL_SPRITE_SIZE: u8 = 0b0010_0000;
     const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
     const CTRL_GENERATE_NMI: u8 = 0b1000_0000;
@@ -68,19 +71,24 @@ impl PPU {
 
     pub fn read_register(&mut self, addr: u16) -> u8 {
         match addr {
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
-                panic!("Attempt to read a write-only ppu register");
-            }
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
             0x2002 => self.register_status,
             0x2004 => self.register_oam_data,
-            0x2007 => self.read_data(),
+            0x2007 => {
+                self.open_bus_value = self.read_data();
+                self.open_bus_value
+            }
+            0x4014 => {
+                panic!("Attempt to read a write-only ppu register: 0x{:x}", addr);
+            }
             _ => {
-                panic!("Unknow address for the PPU registers");
+                panic!("Unknow address for the PPU registers: 0x{:x}", addr);
             }
         }
     }
 
     pub fn write_register(&mut self, addr: u16, data: u8) {
+        self.open_bus_value = data;
         match addr {
             0x2000 => {
                 let nmi = self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0;
@@ -96,7 +104,10 @@ impl PPU {
                 self.register_mask = data;
             }
             0x2002 => {
-                panic!("Attempt to write to a write-only ppu register");
+                panic!(
+                    "Attempt to write to a write-only ppu register: 0x{:x}",
+                    addr
+                );
             }
             0x2003 => {
                 self.register_oam_addr = data;
@@ -127,7 +138,7 @@ impl PPU {
                 self.register_oam_dma = data;
             }
             _ => {
-                panic!("Unknow address for the PPU registers");
+                panic!("Unknow address for the PPU registers: 0x{:x}", addr);
             }
         }
     }
@@ -142,7 +153,11 @@ impl PPU {
     }
 
     fn read_data(&mut self) -> u8 {
-        let addr = self.register_addr;
+        let addr = match self.register_addr {
+            0x3000..=0x3eff => self.register_addr - 0x1000, // mirror to 0x2000..=0x2eff
+            0x3f20..=0x3fff => self.register_addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
+            _ => self.register_addr,
+        };
         self.increment_addr_register();
 
         match addr {
@@ -156,9 +171,8 @@ impl PPU {
                 self.register_data = self.vram[self.mirror_vram_addr(addr) as usize];
                 ret
             }
-            0x3000..=0x3eff => panic!("Attempt to read invalid ppu address: {}", addr),
-            0x3f00..=0x3fff => self.palette[(addr - 0x3f00) as usize],
-            _ => panic!("unexpected access to mirrored space {}", addr),
+            0x3f00..=0x3f1f => self.palette[(addr - 0x3f00) as usize],
+            _ => panic!("unexpected access to mirrored space: 0x{:x}", addr),
         }
     }
 
@@ -214,6 +228,38 @@ mod test {
         }
         pub fn get_cycles(&self) -> usize {
             self.cycles
+        }
+
+        pub fn peek_register(&self, addr: u16) -> u8 {
+            // like read_register, but without mut
+            match addr {
+                0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
+                0x2002 => self.register_status,
+                0x2004 => self.register_oam_data,
+                0x2007 => self.peek_data(),
+                0x4014 => {
+                    panic!("Attempt to read a write-only ppu register: 0x{:x}", addr);
+                }
+                _ => {
+                    panic!("Unknow address for the PPU registers: 0x{:x}", addr);
+                }
+            }
+        }
+
+        fn peek_data(&self) -> u8 {
+            // like read_data, but without mut
+            let addr = match self.register_addr {
+                0x3000..=0x3eff => self.register_addr - 0x1000, // mirror to 0x2000..=0x2eff
+                0x3f20..=0x3fff => self.register_addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
+                _ => self.register_addr,
+            };
+
+            match addr {
+                0..=0x1fff => self.register_data,
+                0x2000..=0x2fff => self.register_data,
+                0x3f00..=0x3f1f => self.palette[(addr - 0x3f00) as usize],
+                _ => panic!("unexpected access to mirrored space: 0x{:x}", addr),
+            }
         }
     }
 

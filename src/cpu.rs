@@ -963,7 +963,7 @@ mod test {
         }
 
         fn trace(&mut self) -> String {
-            let opcode = self.mem_read(self.program_counter);
+            let opcode = self.bus.mem_peek(self.program_counter);
             let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
             let operand = match instruction.addressing_mode {
                 AddressingMode::Immediate
@@ -973,7 +973,7 @@ mod test {
                 | AddressingMode::IndirectX
                 | AddressingMode::IndirectY
                 | AddressingMode::Relative => {
-                    format!("{:02X}   ", self.mem_read(self.program_counter + 1))
+                    format!("{:02X}   ", self.bus.mem_peek(self.program_counter + 1))
                 }
 
                 AddressingMode::Absolute
@@ -981,8 +981,8 @@ mod test {
                 | AddressingMode::AbsoluteY
                 | AddressingMode::Indirect => format!(
                     "{:02X} {:02X}",
-                    self.mem_read(self.program_counter + 1),
-                    self.mem_read(self.program_counter + 2)
+                    self.bus.mem_peek(self.program_counter + 1),
+                    self.bus.mem_peek(self.program_counter + 2)
                 ),
 
                 AddressingMode::Accumulator | AddressingMode::Implied => String::from("     "),
@@ -1022,38 +1022,39 @@ mod test {
                         | AddressingMode::Relative => String::from(""),
                         _ => {
                             let (addr, _) = self.get_operand_address(&instruction.addressing_mode);
-                            format!(" = {:02X}", self.mem_read(addr))
+                            format!(" = {:02X}", self.bus.mem_peek(addr))
                         }
                     }
                 };
 
             let middle = match instruction.addressing_mode {
                 AddressingMode::Immediate => {
-                    format!("#${:02X}", self.mem_read(self.program_counter + 1))
+                    format!("#${:02X}", self.bus.mem_peek(self.program_counter + 1))
                 }
                 AddressingMode::ZeroPage => {
-                    format!("${:02X}", self.mem_read(self.program_counter + 1))
+                    format!("${:02X}", self.bus.mem_peek(self.program_counter + 1))
                 }
                 AddressingMode::ZeroPageX => format!(
                     "${:02X},X @ {:02X}",
-                    self.mem_read(self.program_counter + 1),
+                    self.bus.mem_peek(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::ZeroPageX).0,
                 ),
                 AddressingMode::ZeroPageY => format!(
                     "${:02X},Y @ {:02X}",
-                    self.mem_read(self.program_counter + 1),
+                    self.bus.mem_peek(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::ZeroPageY).0,
                 ),
                 AddressingMode::IndirectX => format!(
                     "(${:02X},X) @ {:02X} = {:04X}",
-                    self.mem_read(self.program_counter + 1),
-                    self.mem_read(self.program_counter + 1)
+                    self.bus.mem_peek(self.program_counter + 1),
+                    self.bus
+                        .mem_peek(self.program_counter + 1)
                         .wrapping_add(self.register_x) as u16,
                     self.get_operand_address(&AddressingMode::IndirectX).0,
                 ),
                 AddressingMode::IndirectY => format!(
                     "(${:02X}),Y = {:04X} @ {:04X}",
-                    self.mem_read(self.program_counter + 1),
+                    self.bus.mem_peek(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::IndirectY)
                         .0
                         .wrapping_sub(self.register_y as u16),
@@ -1064,20 +1065,20 @@ mod test {
                     self.get_operand_address(&AddressingMode::Relative).0
                 ),
                 AddressingMode::Absolute => {
-                    format!("${:04X}", self.mem_read_u16(self.program_counter + 1))
+                    format!("${:04X}", self.bus.mem_peek_u16(self.program_counter + 1))
                 }
                 AddressingMode::AbsoluteX => format!(
                     "${:04X},X @ {:04X}",
-                    self.mem_read_u16(self.program_counter + 1),
+                    self.bus.mem_peek_u16(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::AbsoluteX).0,
                 ),
                 AddressingMode::AbsoluteY => format!(
                     "${:04X},Y @ {:04X}",
-                    self.mem_read_u16(self.program_counter + 1),
+                    self.bus.mem_peek_u16(self.program_counter + 1),
                     self.get_operand_address(&AddressingMode::AbsoluteY).0,
                 ),
                 AddressingMode::Indirect => {
-                    format!("(${:04X})", self.mem_read_u16(self.program_counter + 1))
+                    format!("(${:04X})", self.bus.mem_peek_u16(self.program_counter + 1))
                 }
                 AddressingMode::Accumulator => String::from("A"),
                 AddressingMode::Implied => String::from(""),
