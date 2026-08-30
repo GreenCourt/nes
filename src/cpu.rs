@@ -653,7 +653,6 @@ impl CPU {
         self.status |= CPU::STATUS_RESERVED;
 
         self.program_counter = self.stack_pop_u16();
-        self.program_counter -= 1;
     }
 
     fn rts(&mut self) {
