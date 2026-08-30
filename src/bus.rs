@@ -76,7 +76,7 @@ impl Mem for Bus {
             }
             PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0x2007;
-                self.ppu.read_register(mirror_down_addr)
+                self.ppu.read(mirror_down_addr)
             }
             0x4016 => self.controller.read(),
             0x4017 => {
@@ -105,7 +105,10 @@ impl Mem for Bus {
             }
             PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0x2007;
-                self.ppu.write_register(mirror_down_addr, data);
+                self.ppu.write(mirror_down_addr, data);
+            }
+            0x4014 => {
+                // TODO: OAM_DMA
             }
             0x4016 => self.controller.write(data),
             0x4017 => {
@@ -149,7 +152,7 @@ mod test {
                 }
                 PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                     let mirror_down_addr = addr & 0x2007;
-                    self.ppu.peek_register(mirror_down_addr)
+                    self.ppu.peek(mirror_down_addr)
                 }
                 0x4016 => {
                     0 // dummy

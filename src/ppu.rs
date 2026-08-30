@@ -5,19 +5,17 @@ pub struct PPU {
     register_mask: u8,               // $2001 - PPU_MASK (write)
     register_status: u8,             // $2002 - PPU_STATUS (read)
     register_oam_addr: u8,           // $2003 - OAM_ADDR (write)
-    register_oam_data: u8,           // $2004 - OAM_DATA (read/write)
+    oam_data: [u8; 256],             // $2004 - OAM_DATA (read/write)
     register_scroll: ScrollRegister, // $2005 - PPU_SCROLL (write * 2)
     register_addr: u16,              // $2006 - PPU_ADDR (write * 2)
     register_data: u8,               // $2007 - PPU_DATA (read/write)
-    register_oam_dma: u8,            // $4014 - OAM_DMA (write)
-    internal_w: bool,                // shared by PPU_SCROLL and PPU_ADDR
 
+    internal_w: bool, // shared by PPU_SCROLL and PPU_ADDR
     open_bus_value: u8,
 
     chr_rom: Vec<u8>,
     palette: [u8; 32],
     vram: [u8; 2048],
-    _oam: [u8; 256],
     mirroring: Mirroring,
 
     scanline: u16,
@@ -38,17 +36,15 @@ impl PPU {
             register_mask: 0,
             register_status: 0,
             register_oam_addr: 0,
-            register_oam_data: 0,
+            oam_data: [0; 256],
             register_scroll: ScrollRegister::default(),
             register_addr: 0,
             register_data: 0,
-            register_oam_dma: 0,
             internal_w: false,
             open_bus_value: 0,
             chr_rom,
             palette: [0; 32],
             vram: [0; 2048],
-            _oam: [0; 256],
             mirroring,
             cycles: 0,
             scanline: 0,
@@ -69,8 +65,8 @@ impl PPU {
     const STATUS_SPRITE_ZERO_HIT: u8 = 0b0100_0000;
     const STATUS_VBLANK: u8 = 0b1000_0000;
 
-    pub fn read_register(&mut self, addr: u16) -> u8 {
-        // Don't forget to fix peek_register if you fix this function!
+    pub fn read(&mut self, addr: u16) -> u8 {
+        // Don't forget to fix the peek function if you fix this function!
         match addr {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
             0x2002 => {
@@ -79,13 +75,10 @@ impl PPU {
                 self.internal_w = false;
                 status
             }
-            0x2004 => self.register_oam_data,
+            0x2004 => self.oam_data[self.register_oam_addr as usize],
             0x2007 => {
                 self.open_bus_value = self.read_data();
                 self.open_bus_value
-            }
-            0x4014 => {
-                panic!("Attempt to read a write-only ppu register: 0x{:x}", addr);
             }
             _ => {
                 panic!("Unknow address for the PPU registers: 0x{:x}", addr);
@@ -93,7 +86,7 @@ impl PPU {
         }
     }
 
-    pub fn write_register(&mut self, addr: u16, data: u8) {
+    pub fn write(&mut self, addr: u16, data: u8) {
         self.open_bus_value = data;
         match addr {
             0x2000 => {
@@ -114,7 +107,8 @@ impl PPU {
                 self.register_oam_addr = data;
             }
             0x2004 => {
-                self.register_oam_data = data;
+                self.oam_data[self.register_oam_addr as usize] = data;
+                self.register_oam_addr = self.register_oam_addr.wrapping_add(1);
             }
             0x2005 => {
                 if self.internal_w {
@@ -134,9 +128,6 @@ impl PPU {
             }
             0x2007 => {
                 self.write_data(data);
-            }
-            0x4014 => {
-                self.register_oam_dma = data;
             }
             _ => {
                 panic!("Unknow address for the PPU registers: 0x{:x}", addr);
@@ -458,17 +449,14 @@ mod test {
             self.cycles
         }
 
-        pub fn peek_register(&self, addr: u16) -> u8 {
-            // like read_register, but without mut
-            // Don't forget to fix read_register if you fix this function!
+        pub fn peek(&self, addr: u16) -> u8 {
+            // like read, but without mut
+            // Don't forget to fix the read function if you fix this function!
             match addr {
                 0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
                 0x2002 => self.register_status,
-                0x2004 => self.register_oam_data,
+                0x2004 => self.oam_data[self.register_oam_addr as usize],
                 0x2007 => self.peek_data(),
-                0x4014 => {
-                    panic!("Attempt to read a write-only ppu register: 0x{:x}", addr);
-                }
                 _ => {
                     panic!("Unknow address for the PPU registers: 0x{:x}", addr);
                 }
@@ -494,17 +482,15 @@ mod test {
 
         pub fn trace(&self) -> String {
             format!(
-                "CTRL:0x{:x} MASK:0x{:x} STATUS:0x{:x} OAM_ADDR:0x{:x} OAM_DATA:0x{:x} SCROLL_X:0x{:x} SCROLL_Y:0x{:x} ADDR:0x{:x} DATA:0x{:x} OAM_DMA:0x{:x} W:{}",
+                "CTRL:0x{:x} MASK:0x{:x} STATUS:0x{:x} OAM_ADDR:0x{:x} SCROLL_X:0x{:x} SCROLL_Y:0x{:x} ADDR:0x{:x} DATA:0x{:x} W:{}",
                 self.register_ctrl,
                 self.register_mask,
                 self.register_status,
                 self.register_oam_addr,
-                self.register_oam_data,
                 self.register_scroll.x,
                 self.register_scroll.y,
                 self.register_addr,
                 self.register_data,
-                self.register_oam_dma,
                 self.internal_w as usize,
             )
         }
@@ -516,25 +502,25 @@ mod test {
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
         assert!(!ppu.internal_w);
-        ppu.write_register(0x2006, 0x11);
+        ppu.write(0x2006, 0x11);
         assert!(ppu.internal_w);
-        ppu.write_register(0x2006, 0x22);
+        ppu.write(0x2006, 0x22);
         assert!(!ppu.internal_w);
         assert_eq!(ppu.register_addr, 0x1122);
-        ppu.write_register(0x2006, 0x54);
+        ppu.write(0x2006, 0x54);
         assert!(ppu.internal_w);
         assert_eq!(ppu.register_addr, 0x1422); // masked by 0x3fff
 
-        ppu.write_register(0x2005, 0x44); // write to y because internal_w is shared
+        ppu.write(0x2005, 0x44); // write to y because internal_w is shared
         assert!(!ppu.internal_w);
         assert_eq!(ppu.register_scroll.y, 0x44);
 
-        ppu.write_register(0x2005, 0x55);
+        ppu.write(0x2005, 0x55);
         assert!(ppu.internal_w);
         assert_eq!(ppu.register_scroll.y, 0x44);
         assert_eq!(ppu.register_scroll.x, 0x55);
 
-        ppu.read_register(0x2002); // reading status register clears the internal_w
+        ppu.read(0x2002); // reading status register clears the internal_w
         assert!(!ppu.internal_w);
     }
 
@@ -544,9 +530,9 @@ mod test {
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
         assert!(!ppu.internal_w);
-        ppu.write_register(0x2006, 0x11);
+        ppu.write(0x2006, 0x11);
         assert!(ppu.internal_w);
-        ppu.write_register(0x2006, 0x22);
+        ppu.write(0x2006, 0x22);
         assert!(!ppu.internal_w);
         assert_eq!(ppu.register_addr, 0x1122);
 
@@ -566,12 +552,24 @@ mod test {
         let chr_rom = vec![0x11, 0x22, 0x33, 0x44, 0x55];
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
-        ppu.write_register(0x2006, 0);
-        ppu.write_register(0x2006, 1);
+        ppu.write(0x2006, 0);
+        ppu.write(0x2006, 1);
         // addr is incremented by read
-        ppu.read_register(0x2007); // dummy read
-        assert_eq!(ppu.read_register(0x2007), 0x22);
-        assert_eq!(ppu.read_register(0x2007), 0x33);
-        assert_eq!(ppu.read_register(0x2007), 0x44);
+        ppu.read(0x2007); // dummy read
+        assert_eq!(ppu.read(0x2007), 0x22);
+        assert_eq!(ppu.read(0x2007), 0x33);
+        assert_eq!(ppu.read(0x2007), 0x44);
+    }
+
+    #[test]
+    fn test_oam_rw() {
+        let chr_rom = vec![0x11, 0x22, 0x33, 0x44, 0x55];
+        let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
+
+        ppu.write(0x2003, 12);
+        assert_eq!(ppu.register_oam_addr, 12);
+        ppu.write(0x2004, 55);
+        assert_eq!(ppu.register_oam_addr, 13);
+        assert_eq!(ppu.oam_data[12], 55);
     }
 }
