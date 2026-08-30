@@ -55,7 +55,7 @@ impl PPU {
     const _CTRL_NAMETABLE1: u8 = 0b0000_0001;
     const _CTRL_NAMETABLE2: u8 = 0b0000_0010;
     const CTRL_VRAM_ADD_INCREMENT: u8 = 0b0000_0100;
-    const _CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
+    const CTRL_SPRITE_PATTERN_ADDR: u8 = 0b0000_1000;
     const CTRL_BACKGROUND_PATTERN_ADDR: u8 = 0b0001_0000;
     const _CTRL_SPRITE_SIZE: u8 = 0b0010_0000;
     const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
@@ -239,12 +239,13 @@ impl PPU {
 
     pub fn render_nametable(&self) -> Frame {
         let mut frame = Frame::new();
+
+        // draw background
         let bank = if self.register_ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
             0x1000
         } else {
             0x0000
         };
-
         for i in 0..0x03c0 {
             let tile_number = self.vram[i] as u16;
             let tile_x = i % 32;
@@ -269,6 +270,46 @@ impl PPU {
                         _ => panic!("unreachable"),
                     };
                     frame.set_pixel(tile_x * 8 + x, tile_y * 8 + y, rgb);
+                }
+            }
+        }
+
+        // draw sprites
+        for i in (0..self.oam_data.len()).step_by(4).rev() {
+            let tile_number = self.oam_data[i + 1] as u16;
+            let tile_x = self.oam_data[i + 3] as usize;
+            let tile_y = self.oam_data[i] as usize;
+
+            let flip_vertical = self.oam_data[i + 2] >> 7 & 1 == 1;
+            let flip_horizontal = self.oam_data[i + 2] >> 6 & 1 == 1;
+            let pallette_idx = self.oam_data[i + 2] & 0b11;
+            let sprite_palette = self.sprite_palette(pallette_idx);
+
+            let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
+
+            let tile = &self.chr_rom
+                [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
+
+            for y in 0..=7 {
+                let mut upper = tile[y];
+                let mut lower = tile[y + 8];
+                'xfor: for x in (0..=7).rev() {
+                    let value = (1 & lower) << 1 | (1 & upper);
+                    upper >>= 1;
+                    lower >>= 1;
+                    let rgb = match value {
+                        0 => continue 'xfor,
+                        1 => SYSTEM_PALETTE[sprite_palette[1] as usize],
+                        2 => SYSTEM_PALETTE[sprite_palette[2] as usize],
+                        3 => SYSTEM_PALETTE[sprite_palette[3] as usize],
+                        _ => panic!("unreachable"),
+                    };
+                    match (flip_horizontal, flip_vertical) {
+                        (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
+                        (true, false) => frame.set_pixel(tile_x + 7 - x, tile_y + y, rgb),
+                        (false, true) => frame.set_pixel(tile_x + x, tile_y + 7 - y, rgb),
+                        (true, true) => frame.set_pixel(tile_x + 7 - x, tile_y + 7 - y, rgb),
+                    }
                 }
             }
         }
@@ -335,6 +376,16 @@ impl PPU {
             self.palette[palette_start],
             self.palette[palette_start + 1],
             self.palette[palette_start + 2],
+        ]
+    }
+
+    fn sprite_palette(&self, pallete_idx: u8) -> [u8; 4] {
+        let start = 0x11 + (pallete_idx * 4) as usize;
+        [
+            0,
+            self.palette[start],
+            self.palette[start + 1],
+            self.palette[start + 2],
         ]
     }
 }
