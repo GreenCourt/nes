@@ -180,7 +180,7 @@ impl PPU {
         self.increment_addr_register();
 
         match addr {
-            0..=0x1fff => panic!("Attempt to write to chr rom space: 0x{:x}", addr),
+            0..=0x1fff => println!("Attempt to write to chr rom space: 0x{:x}", addr),
             0x2000..=0x2fff => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }

@@ -166,7 +166,7 @@ impl Mem for Bus {
                 // 2nd controller is not implemented
             }
             ROM_START..=ROM_END => {
-                panic!("Attempt to write to Cartridge ROM space");
+                println!("Attempt to write to Cartridge ROM space: 0x{:x}", addr);
             }
             _ => {
                 // TODO
