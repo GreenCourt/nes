@@ -146,6 +146,7 @@ impl CPU {
     }
 
     fn get_operand_address(&mut self, mode: &AddressingMode) -> (u16, bool) {
+        // Don't forget to fix peek_operand_address if you fix this function!
         match mode {
             AddressingMode::Immediate => (self.program_counter + 1, false),
 
@@ -951,6 +952,104 @@ mod test {
             (self.status & CPU::STATUS_BREAK) != 0
         }
 
+        fn peek_operand_address(&self, mode: &AddressingMode) -> (u16, bool) {
+            // like get_operand_address but without mut
+            // Don't forget to fix get_operand_address if you fix this function!
+            match mode {
+                AddressingMode::Immediate => (self.program_counter + 1, false),
+
+                AddressingMode::ZeroPage => {
+                    (self.bus.mem_peek(self.program_counter + 1) as u16, false)
+                }
+
+                AddressingMode::ZeroPageX => {
+                    let pos = self.bus.mem_peek(self.program_counter + 1);
+                    // wrap as u8, then cast to u16
+                    (pos.wrapping_add(self.register_x) as u16, false)
+                }
+
+                AddressingMode::ZeroPageY => {
+                    let pos = self.bus.mem_peek(self.program_counter + 1);
+                    // wrap as u8, then cast to u16
+                    (pos.wrapping_add(self.register_y) as u16, false)
+                }
+                AddressingMode::Absolute => {
+                    (self.bus.mem_peek_u16(self.program_counter + 1), false)
+                }
+
+                AddressingMode::AbsoluteX => {
+                    let base = self.bus.mem_peek_u16(self.program_counter + 1);
+                    // wrap as u16
+                    let addr = base.wrapping_add(self.register_x as u16);
+                    (addr, addr & 0xFF00 != base & 0xFF00)
+                }
+
+                AddressingMode::AbsoluteY => {
+                    let base = self.bus.mem_peek_u16(self.program_counter + 1);
+                    // wrap as u16
+                    let addr = base.wrapping_add(self.register_y as u16);
+                    (addr, addr & 0xFF00 != base & 0xFF00)
+                }
+
+                AddressingMode::Indirect => {
+                    let ptr = self.bus.mem_peek_u16(self.program_counter + 1);
+                    if ptr & 0x00FF == 0x00FF {
+                        // https://forums.nesdev.org/viewtopic.php?t=19140
+                        let lo = self.bus.mem_peek(ptr) as u16;
+                        let hi = self.bus.mem_peek(ptr & 0xFF00) as u16;
+                        let addr = (hi << 8) | lo;
+                        (addr, false)
+                    } else {
+                        let addr = self.bus.mem_peek_u16(ptr);
+                        (addr, false)
+                    }
+                }
+
+                AddressingMode::IndirectX => {
+                    let ptr_base: u8 = self.bus.mem_peek(self.program_counter + 1);
+                    let ptr: u8 = ptr_base.wrapping_add(self.register_x); // wrap as u8
+
+                    let lo = self.bus.mem_peek(ptr as u16) as u16;
+                    let hi = self.bus.mem_peek(
+                        ptr.wrapping_add(1) as u16, /* wrap as u8 then cast to u16 */
+                    ) as u16;
+                    let addr = (hi << 8) | lo; // this is different to bus.mem_peek_u16 because of wrapping
+                    (addr, false)
+                }
+
+                AddressingMode::IndirectY => {
+                    let ptr: u8 = self.bus.mem_peek(self.program_counter + 1);
+
+                    let lo = self.bus.mem_peek(ptr as u16) as u16;
+                    let hi = self.bus.mem_peek(
+                        ptr.wrapping_add(1) as u16, /* wrap as u8 then cast to u16 */
+                    ) as u16;
+
+                    let base = (hi << 8) | lo; // this is different to bus.mem_peek_u16 because of wrapping
+                    let addr = base.wrapping_add(self.register_y as u16);
+                    (addr, addr & 0xFF00 != base & 0xFF00)
+                }
+
+                AddressingMode::Relative => {
+                    let offset: i8 = self.bus.mem_peek(self.program_counter + 1) as i8;
+                    (
+                        self.program_counter
+                            .wrapping_add(2)
+                            .wrapping_add(offset as u16),
+                        false,
+                    )
+                }
+
+                AddressingMode::Accumulator => {
+                    panic!("cannot resolve address for the Accumulator mode");
+                }
+
+                AddressingMode::Implied => {
+                    panic!("cannot resolve address for the Implied mode");
+                }
+            }
+        }
+
         fn reset_and_run_while_brk(&mut self) {
             self.reset();
             loop {
@@ -962,7 +1061,7 @@ mod test {
             }
         }
 
-        fn trace(&mut self) -> String {
+        fn trace(&self) -> String {
             let opcode = self.bus.mem_peek(self.program_counter);
             let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
             let operand = match instruction.addressing_mode {
@@ -1007,7 +1106,7 @@ mod test {
                     match instruction.addressing_mode {
                         AddressingMode::Absolute => String::from(""),
                         AddressingMode::Indirect => {
-                            let (addr, _) = self.get_operand_address(&instruction.addressing_mode);
+                            let (addr, _) = self.peek_operand_address(&instruction.addressing_mode);
                             format!(" = {:04X}", addr)
                         }
                         _ => {
@@ -1021,7 +1120,7 @@ mod test {
                         | AddressingMode::Implied
                         | AddressingMode::Relative => String::from(""),
                         _ => {
-                            let (addr, _) = self.get_operand_address(&instruction.addressing_mode);
+                            let (addr, _) = self.peek_operand_address(&instruction.addressing_mode);
                             format!(" = {:02X}", self.bus.mem_peek(addr))
                         }
                     }
@@ -1037,12 +1136,12 @@ mod test {
                 AddressingMode::ZeroPageX => format!(
                     "${:02X},X @ {:02X}",
                     self.bus.mem_peek(self.program_counter + 1),
-                    self.get_operand_address(&AddressingMode::ZeroPageX).0,
+                    self.peek_operand_address(&AddressingMode::ZeroPageX).0,
                 ),
                 AddressingMode::ZeroPageY => format!(
                     "${:02X},Y @ {:02X}",
                     self.bus.mem_peek(self.program_counter + 1),
-                    self.get_operand_address(&AddressingMode::ZeroPageY).0,
+                    self.peek_operand_address(&AddressingMode::ZeroPageY).0,
                 ),
                 AddressingMode::IndirectX => format!(
                     "(${:02X},X) @ {:02X} = {:04X}",
@@ -1050,19 +1149,19 @@ mod test {
                     self.bus
                         .mem_peek(self.program_counter + 1)
                         .wrapping_add(self.register_x) as u16,
-                    self.get_operand_address(&AddressingMode::IndirectX).0,
+                    self.peek_operand_address(&AddressingMode::IndirectX).0,
                 ),
                 AddressingMode::IndirectY => format!(
                     "(${:02X}),Y = {:04X} @ {:04X}",
                     self.bus.mem_peek(self.program_counter + 1),
-                    self.get_operand_address(&AddressingMode::IndirectY)
+                    self.peek_operand_address(&AddressingMode::IndirectY)
                         .0
                         .wrapping_sub(self.register_y as u16),
-                    self.get_operand_address(&AddressingMode::IndirectY).0,
+                    self.peek_operand_address(&AddressingMode::IndirectY).0,
                 ),
                 AddressingMode::Relative => format!(
                     "${:04X}",
-                    self.get_operand_address(&AddressingMode::Relative).0
+                    self.peek_operand_address(&AddressingMode::Relative).0
                 ),
                 AddressingMode::Absolute => {
                     format!("${:04X}", self.bus.mem_peek_u16(self.program_counter + 1))
@@ -1070,12 +1169,12 @@ mod test {
                 AddressingMode::AbsoluteX => format!(
                     "${:04X},X @ {:04X}",
                     self.bus.mem_peek_u16(self.program_counter + 1),
-                    self.get_operand_address(&AddressingMode::AbsoluteX).0,
+                    self.peek_operand_address(&AddressingMode::AbsoluteX).0,
                 ),
                 AddressingMode::AbsoluteY => format!(
                     "${:04X},Y @ {:04X}",
                     self.bus.mem_peek_u16(self.program_counter + 1),
-                    self.get_operand_address(&AddressingMode::AbsoluteY).0,
+                    self.peek_operand_address(&AddressingMode::AbsoluteY).0,
                 ),
                 AddressingMode::Indirect => {
                     format!("(${:04X})", self.bus.mem_peek_u16(self.program_counter + 1))
@@ -4530,7 +4629,7 @@ mod test {
                 // TODO: currently, break because APU is not implemented
                 break;
             }
-            let opcode = cpu.mem_read(cpu.program_counter);
+            let opcode = cpu.bus.mem_peek(cpu.program_counter);
             if opcode == Opcode::BRK_Implied as u8 {
                 return;
             }

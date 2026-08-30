@@ -1,5 +1,5 @@
 use super::cartridge::Cartridge;
-use super::ppu::PPU;
+use super::ppu::{Frame, PPU};
 
 const RAM_START: u16 = 0x0000;
 const RAM_MIRROS_END: u16 = 0x1FFF;
@@ -42,7 +42,7 @@ impl Bus {
     }
 
     pub fn tick(&mut self, cycles: u8) {
-        self.cycles += cycles as usize;
+        self.cycles = self.cycles.wrapping_add(cycles as usize);
         self.ppu.tick(cycles * 3);
     }
 
@@ -53,10 +53,15 @@ impl Bus {
     pub fn get_cycles(&self) -> usize {
         self.cycles
     }
+
+    pub fn get_frame(&self) -> Frame {
+        self.ppu.get_frame()
+    }
 }
 
 impl Mem for Bus {
     fn mem_read(&mut self, addr: u16) -> u8 {
+        // Don't forget to fix mem_peek if you fix this function!
         match addr {
             RAM_START..=RAM_MIRROS_END => {
                 let mirror_down_addr = addr & 0x7FF;
@@ -68,13 +73,14 @@ impl Mem for Bus {
             }
             ROM_START..=ROM_END => self.read_prg_rom(addr),
             _ => {
-                //println!("Ignoring mem access at 0x{:X}", addr);
+                println!("Ignoring mem access at 0x{:X}", addr);
                 0 // TODO: dummy
             }
         }
     }
 
     fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        // Don't forget to fix mem_peek_u16 if you fix this function!
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos.wrapping_add(1)) as u16;
         (hi << 8) | lo
@@ -119,6 +125,8 @@ mod test {
             self.ppu.get_cycles()
         }
         pub fn mem_peek(&self, addr: u16) -> u8 {
+            // like mem_read but without mut
+            // Don't forget to fix mem_read if you fix this function!
             match addr {
                 RAM_START..=RAM_MIRROS_END => {
                     let mirror_down_addr = addr & 0x7FF;
@@ -135,9 +143,14 @@ mod test {
             }
         }
         pub fn mem_peek_u16(&self, pos: u16) -> u16 {
+            // like mem_read but without mut
+            // Don't forget to fix mem_read_u16 if you fix this function!
             let lo = self.mem_peek(pos) as u16;
             let hi = self.mem_peek(pos.wrapping_add(1)) as u16;
             (hi << 8) | lo
+        }
+        pub fn trace_ppu(&self) -> String {
+            self.ppu.trace()
         }
     }
 }
