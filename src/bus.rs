@@ -22,6 +22,12 @@ pub struct Bus {
     prg_rom: Vec<u8>,
     controller: Controller,
     cycles: usize,
+
+    dma_active: bool,
+    dma_page: u8,
+    dma_step: u16,
+    dma_buffer: u8,
+    dma_total_cycles: u16,
 }
 
 impl Bus {
@@ -32,6 +38,11 @@ impl Bus {
             prg_rom: cartridge.prg_rom,
             controller: Controller::new(),
             cycles: 0,
+            dma_active: false,
+            dma_page: 0,
+            dma_step: 0,
+            dma_buffer: 0,
+            dma_total_cycles: 0,
         }
     }
 
@@ -46,11 +57,47 @@ impl Bus {
 
     pub fn tick(&mut self, cycles: u8) {
         self.cycles = self.cycles.wrapping_add(cycles as usize);
+        if self.dma_active {
+            self.process_dma(cycles);
+        }
         self.ppu.tick(cycles * 3);
     }
 
     pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
         self.ppu.poll_nmi_interrupt()
+    }
+
+    fn process_dma(&mut self, cycles: u8) {
+        assert!(self.dma_active);
+
+        let dummy_cycles = self.dma_total_cycles - 512;
+
+        for _ in 0..=cycles {
+            if self.dma_step >= dummy_cycles {
+                let transfer_step = self.dma_step - dummy_cycles;
+                if transfer_step.is_multiple_of(2) {
+                    // even step: read data from cpu_ram and store it to the buffer
+                    let addr = ((self.dma_page as u16) << 8) | (transfer_step / 2);
+                    self.dma_buffer = self.mem_read(addr);
+                } else {
+                    // odd step: write the buffer data to ppu
+                    self.ppu.write(0x2004, self.dma_buffer)
+                }
+            } else {
+                // nothing to do
+            }
+
+            self.dma_step += 1;
+
+            if self.dma_step >= self.dma_total_cycles {
+                self.dma_active = false;
+                break;
+            }
+        }
+    }
+
+    pub fn dma_is_active(&self) -> bool {
+        self.dma_active
     }
 
     pub fn get_cycles(&self) -> usize {
@@ -108,7 +155,11 @@ impl Mem for Bus {
                 self.ppu.write(mirror_down_addr, data);
             }
             0x4014 => {
-                // TODO: OAM_DMA
+                // start OAM DMA
+                self.dma_page = data;
+                self.dma_active = true;
+                self.dma_step = 0;
+                self.dma_total_cycles = if self.cycles % 2 == 1 { 514 } else { 513 };
             }
             0x4016 => self.controller.write(data),
             0x4017 => {

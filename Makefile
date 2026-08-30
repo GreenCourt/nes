@@ -18,6 +18,7 @@ fmt:
 
 check:
 	cargo check --target=wasm32-unknown-unknown
+	cargo check --tests
 	cargo clippy
 
 b: build

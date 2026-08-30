@@ -821,8 +821,14 @@ impl CPU {
     pub fn execute_single_instruction(&mut self) -> usize {
         let cycles_before = self.bus.get_cycles();
 
+        if self.bus.dma_is_active() {
+            self.bus.tick(1); // dms is processed in the tick function
+            return 1; // CPU is inactive during dma
+        }
+
         if let Some(_nmi) = self.bus.poll_nmi_interrupt() {
             self.interrupt_nmi();
+            return self.bus.get_cycles().wrapping_sub(cycles_before);
         }
 
         let opcode = self.mem_read(self.program_counter);
