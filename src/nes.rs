@@ -1,5 +1,6 @@
 use super::bus::Bus;
 use super::cartridge::Cartridge;
+use super::controller::Controller;
 use super::cpu::CPU;
 use super::ppu::Frame;
 
@@ -36,5 +37,53 @@ impl Nes {
     pub fn reset(&mut self) {
         self.cpu.reset();
         self.overshoot_cycles = 0;
+    }
+
+    pub fn update_button_right(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_RIGHT);
+    }
+
+    pub fn update_button_left(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_LEFT);
+    }
+
+    pub fn update_button_down(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_DOWN);
+    }
+
+    pub fn update_button_up(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_UP);
+    }
+
+    pub fn update_button_start(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_START);
+    }
+
+    pub fn update_button_select(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_SELECT);
+    }
+
+    pub fn update_button_a(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_A);
+    }
+
+    pub fn update_button_b(&mut self, pushed: bool) {
+        self.cpu
+            .bus
+            .update_button_status(pushed, Controller::BUTTON_B);
     }
 }

@@ -1,4 +1,5 @@
 use super::cartridge::Cartridge;
+use super::controller::Controller;
 use super::ppu::{Frame, PPU};
 
 const RAM_START: u16 = 0x0000;
@@ -19,6 +20,7 @@ pub struct Bus {
     cpu_ram: [u8; 2048],
     ppu: PPU,
     prg_rom: Vec<u8>,
+    controller: Controller,
     cycles: usize,
 }
 
@@ -28,6 +30,7 @@ impl Bus {
             cpu_ram: [0; 2048],
             ppu: PPU::new(cartridge.chr_rom, cartridge.screen_mirroring),
             prg_rom: cartridge.prg_rom,
+            controller: Controller::new(),
             cycles: 0,
         }
     }
@@ -57,6 +60,10 @@ impl Bus {
     pub fn get_frame(&self) -> Frame {
         self.ppu.get_frame()
     }
+
+    pub fn update_button_status(&mut self, pushed: bool, button_bit: u8) {
+        self.controller.update_button_status(pushed, button_bit);
+    }
 }
 
 impl Mem for Bus {
@@ -70,6 +77,10 @@ impl Mem for Bus {
             PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.read_register(mirror_down_addr)
+            }
+            0x4016 => self.controller.read(),
+            0x4017 => {
+                0 // 2nd controller is not implemented
             }
             ROM_START..=ROM_END => self.read_prg_rom(addr),
             _ => {
@@ -95,6 +106,10 @@ impl Mem for Bus {
             PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.write_register(mirror_down_addr, data);
+            }
+            0x4016 => self.controller.write(data),
+            0x4017 => {
+                // 2nd controller is not implemented
             }
             ROM_START..=ROM_END => {
                 panic!("Attempt to write to Cartridge ROM space");
@@ -135,6 +150,12 @@ mod test {
                 PPU_REGISTERS_START..=PPU_REGISTERS_MIRRORS_END => {
                     let mirror_down_addr = addr & 0x2007;
                     self.ppu.peek_register(mirror_down_addr)
+                }
+                0x4016 => {
+                    0 // dummy
+                }
+                0x4017 => {
+                    0 // 2nd controller is not implemented
                 }
                 ROM_START..=ROM_END => self.read_prg_rom(addr),
                 _ => {

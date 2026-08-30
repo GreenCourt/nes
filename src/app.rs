@@ -11,7 +11,6 @@ pub struct NesApp {
     rom_data: Arc<Mutex<Option<Vec<u8>>>>,
     nes: Option<Nes>,
     texture: Option<egui::TextureHandle>,
-    pressed_keys_text: String,
     message: String,
 }
 
@@ -29,7 +28,6 @@ impl NesApp {
             rom_data: Arc::new(Mutex::new(None)),
             nes: None,
             texture: None,
-            pressed_keys_text: String::new(),
             message: String::new(),
         }
     }
@@ -73,6 +71,36 @@ impl eframe::App for NesApp {
             }
         }
 
+        if let Some(nes) = &mut self.nes {
+            let (key_w, key_a, key_s, key_d, key_j, key_k, key_v, key_b) = ctx.input(|i| {
+                (
+                    i.key_down(egui::Key::W),
+                    i.key_down(egui::Key::A),
+                    i.key_down(egui::Key::S),
+                    i.key_down(egui::Key::D),
+                    i.key_down(egui::Key::J),
+                    i.key_down(egui::Key::K),
+                    i.key_down(egui::Key::V),
+                    i.key_down(egui::Key::B),
+                )
+            });
+            nes.update_button_right(key_d);
+            nes.update_button_left(key_a);
+            nes.update_button_down(key_s);
+            nes.update_button_up(key_w);
+            nes.update_button_start(key_b);
+            nes.update_button_select(key_v);
+            nes.update_button_a(key_k);
+            nes.update_button_b(key_j);
+
+            nes.step(0.01); // TODO: Specify the correct number of seconds.
+            ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0 / 60.0));
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+
         let (key_w, key_a, key_s, key_d, key_j, key_k, key_v, key_b) = ctx.input(|i| {
             (
                 i.key_down(egui::Key::W),
@@ -86,32 +114,15 @@ impl eframe::App for NesApp {
             )
         });
 
-        self.pressed_keys_text = String::new();
-        self.pressed_keys_text
-            .push_str(if key_w { "W" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_a { "A" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_s { "S" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_d { "D" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_j { "J" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_k { "K" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_v { "V" } else { "-" });
-        self.pressed_keys_text
-            .push_str(if key_b { "B" } else { "-" });
-
-        if let Some(nes) = &mut self.nes {
-            nes.step(0.01); // TODO: Specify the correct number of seconds.
-            ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0 / 60.0));
-        }
-    }
-
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let ctx = ui.ctx().clone();
+        let mut pressed_keys_text = String::new();
+        pressed_keys_text.push_str(if key_w { "W" } else { "-" });
+        pressed_keys_text.push_str(if key_a { "A" } else { "-" });
+        pressed_keys_text.push_str(if key_s { "S" } else { "-" });
+        pressed_keys_text.push_str(if key_d { "D" } else { "-" });
+        pressed_keys_text.push_str(if key_j { "J" } else { "-" });
+        pressed_keys_text.push_str(if key_k { "K" } else { "-" });
+        pressed_keys_text.push_str(if key_v { "V" } else { "-" });
+        pressed_keys_text.push_str(if key_b { "B" } else { "-" });
 
         ui.horizontal(|ui| {
             if ui.button("Reset").clicked() {
@@ -131,7 +142,7 @@ impl eframe::App for NesApp {
             }
 
             ui.add_space(8.0);
-            ui.heading(&self.pressed_keys_text);
+            ui.heading(&pressed_keys_text);
             ui.add_space(8.0);
             ui.heading(&self.message);
         });
