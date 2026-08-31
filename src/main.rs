@@ -6,11 +6,7 @@ pub mod nes;
 pub mod opcode;
 pub mod ppu;
 
-#[cfg(target_arch = "wasm32")]
 mod app;
-
-#[cfg(not(target_arch = "wasm32"))]
-fn main() {}
 
 #[cfg(target_arch = "wasm32")]
 fn main() {

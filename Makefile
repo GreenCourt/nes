@@ -11,13 +11,12 @@ trunk:
 
 # test on host, not on wasm
 test:
-	cargo test -q
+	cargo test -q --target=host-tuple
 
 fmt:
 	cargo fmt
 
 check:
-	cargo check --target=wasm32-unknown-unknown
 	cargo check --tests
 	cargo clippy
 

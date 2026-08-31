@@ -1,3 +1,4 @@
+#![cfg(target_arch = "wasm32")]
 use super::nes::Nes;
 use super::ppu::Frame;
 use eframe::egui;
@@ -56,19 +57,19 @@ impl NesApp {
 
 impl eframe::App for NesApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Ok(mut guard) = self.rom_data.lock() {
-            if let Some(rom_bytes) = guard.take() {
-                let result = Nes::new(&rom_bytes);
-                match result {
-                    Ok(nes) => {
-                        self.nes = Some(nes);
-                    }
-                    Err(_err) => {
-                        self.message = String::from("Failed to load ROM");
-                    }
+        if let Ok(mut guard) = self.rom_data.lock()
+            && let Some(rom_bytes) = guard.take()
+        {
+            let result = Nes::new(&rom_bytes);
+            match result {
+                Ok(nes) => {
+                    self.nes = Some(nes);
                 }
-                self.texture = None;
+                Err(_err) => {
+                    self.message = String::from("Failed to load ROM");
+                }
             }
+            self.texture = None;
         }
 
         if let Some(nes) = &mut self.nes {
@@ -125,10 +126,10 @@ impl eframe::App for NesApp {
         pressed_keys_text.push_str(if key_b { "B" } else { "-" });
 
         ui.horizontal(|ui| {
-            if ui.button("Reset").clicked() {
-                if let Some(nes) = &mut self.nes {
-                    nes.reset();
-                }
+            if ui.button("Reset").clicked()
+                && let Some(nes) = &mut self.nes
+            {
+                nes.reset();
             }
 
             if ui.button("Open ROM").clicked() {
