@@ -1,16 +1,24 @@
 use crate::cartridge::Mirroring;
 
 pub struct PPU {
-    register_ctrl: u8,               // $2000 - PPU_CTRL (write)
-    register_mask: u8,               // $2001 - PPU_MASK (write)
-    register_status: u8,             // $2002 - PPU_STATUS (read)
-    register_oam_addr: u8,           // $2003 - OAM_ADDR (write)
-    oam_data: [u8; 256],             // $2004 - OAM_DATA (read/write)
-    register_scroll: ScrollRegister, // $2005 - PPU_SCROLL (write * 2)
-    register_addr: u16,              // $2006 - PPU_ADDR (write * 2)
-    register_data: u8,               // $2007 - PPU_DATA (read/write)
+    // $2000 - PPU_CTRL (write)
+    // $2001 - PPU_MASK (write)
+    // $2002 - PPU_STATUS (read)
+    // $2003 - OAM_ADDR (write)
+    // $2004 - OAM_DATA (read/write)
+    // $2005 - PPU_SCROLL (write * 2)
+    // $2006 - PPU_ADDR (write * 2)
+    // $2007 - PPU_DATA (read/write)
+    ctrl: u8,
+    mask: u8,
+    status: u8,
+    oam_addr: u8,
+    oam_data: [u8; 256],
+    scroll: ScrollRegister,
+    addr: u16,
+    data: u8,
 
-    internal_w: bool, // shared by PPU_SCROLL and PPU_ADDR
+    w: bool, // shared by PPU_SCROLL and PPU_ADDR
     open_bus_value: u8,
 
     chr_rom: Vec<u8>,
@@ -35,15 +43,15 @@ struct ScrollRegister {
 impl PPU {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
         PPU {
-            register_ctrl: 0,
-            register_mask: 0,
-            register_status: 0,
-            register_oam_addr: 0,
+            ctrl: 0,
+            mask: 0,
+            status: 0,
+            oam_addr: 0,
             oam_data: [0; 256],
-            register_scroll: ScrollRegister::default(),
-            register_addr: 0,
-            register_data: 0,
-            internal_w: false,
+            scroll: ScrollRegister::default(),
+            addr: 0,
+            data: 0,
+            w: false,
             open_bus_value: 0,
             chr_rom,
             palette: [0; 32],
@@ -80,12 +88,12 @@ impl PPU {
         match addr {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
             0x2002 => {
-                let status = self.register_status;
-                self.register_status &= !PPU::STATUS_VBLANK;
-                self.internal_w = false;
+                let status = self.status;
+                self.status &= !PPU::STATUS_VBLANK;
+                self.w = false;
                 status
             }
-            0x2004 => self.oam_data[self.register_oam_addr as usize],
+            0x2004 => self.oam_data[self.oam_addr as usize],
             0x2007 => {
                 self.open_bus_value = self.read_data();
                 self.open_bus_value
@@ -100,41 +108,41 @@ impl PPU {
         self.open_bus_value = data;
         match addr {
             0x2000 => {
-                let nmi = self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0;
-                self.register_ctrl = data;
+                let nmi = self.ctrl & PPU::CTRL_GENERATE_NMI != 0;
+                self.ctrl = data;
                 if !nmi
-                    && (self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0)
-                    && (self.register_status & PPU::STATUS_VBLANK != 0)
+                    && (self.ctrl & PPU::CTRL_GENERATE_NMI != 0)
+                    && (self.status & PPU::STATUS_VBLANK != 0)
                 {
                     self.nmi_interrupt = Some(1);
                 }
             }
             0x2001 => {
-                self.register_mask = data;
+                self.mask = data;
             }
             0x2002 => (),
             0x2003 => {
-                self.register_oam_addr = data;
+                self.oam_addr = data;
             }
             0x2004 => {
-                self.oam_data[self.register_oam_addr as usize] = data;
-                self.register_oam_addr = self.register_oam_addr.wrapping_add(1);
+                self.oam_data[self.oam_addr as usize] = data;
+                self.oam_addr = self.oam_addr.wrapping_add(1);
             }
             0x2005 => {
-                if self.internal_w {
-                    self.register_scroll.y = data;
+                if self.w {
+                    self.scroll.y = data;
                 } else {
-                    self.register_scroll.x = data;
+                    self.scroll.x = data;
                 }
-                self.internal_w = !self.internal_w;
+                self.w = !self.w;
             }
             0x2006 => {
-                self.register_addr = if self.internal_w {
-                    (self.register_addr & 0xff00) | data as u16
+                self.addr = if self.w {
+                    (self.addr & 0xff00) | data as u16
                 } else {
-                    ((data & 0x3f) as u16) << 8 | (self.register_addr & 0xff)
+                    ((data & 0x3f) as u16) << 8 | (self.addr & 0xff)
                 };
-                self.internal_w = !self.internal_w;
+                self.w = !self.w;
             }
             0x2007 => {
                 self.write_data(data);
@@ -146,33 +154,33 @@ impl PPU {
     }
 
     fn increment_addr_register(&mut self) {
-        let inc: u16 = if (self.register_ctrl & PPU::CTRL_VRAM_ADD_INCREMENT) != 0 {
+        let inc: u16 = if (self.ctrl & PPU::CTRL_VRAM_ADD_INCREMENT) != 0 {
             32
         } else {
             1
         };
-        self.register_addr = self.register_addr.wrapping_add(inc) & 0x3fff;
+        self.addr = self.addr.wrapping_add(inc) & 0x3fff;
     }
 
     fn read_data(&mut self) -> u8 {
         // Don't forget to fix peek_data if you fix this function!
-        let addr = match self.register_addr {
-            0x3000..=0x3eff => self.register_addr - 0x1000, // mirror to 0x2000..=0x2eff
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.register_addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
-            0x3f20..=0x3fff => self.register_addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
-            _ => self.register_addr,
+        let addr = match self.addr {
+            0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
+            0x3f20..=0x3fff => self.addr & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
+            _ => self.addr,
         };
         self.increment_addr_register();
 
         match addr {
             0..=0x1fff => {
-                let ret = self.register_data;
-                self.register_data = self.chr_rom[addr as usize];
+                let ret = self.data;
+                self.data = self.chr_rom[addr as usize];
                 ret
             }
             0x2000..=0x2fff => {
-                let ret = self.register_data;
-                self.register_data = self.vram[self.mirror_vram_addr(addr) as usize];
+                let ret = self.data;
+                self.data = self.vram[self.mirror_vram_addr(addr) as usize];
                 ret
             }
             0x3f00..=0x3f1f => self.palette[(addr - 0x3f00) as usize],
@@ -181,11 +189,11 @@ impl PPU {
     }
 
     fn write_data(&mut self, value: u8) {
-        let addr = match self.register_addr {
-            0x3000..=0x3eff => self.register_addr - 0x1000, // mirror to 0x2000..=0x2eff
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.register_addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
-            0x3f20..=0x3fff => self.register_addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
-            _ => self.register_addr,
+        let addr = match self.addr {
+            0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
+            0x3f20..=0x3fff => self.addr & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
+            _ => self.addr,
         };
         self.increment_addr_register();
 
@@ -225,12 +233,12 @@ impl PPU {
             self.cycles += cycles_for_current_scanline;
             remaining -= cycles_for_current_scanline;
 
-            if self.register_status & PPU::STATUS_SPRITE_ZERO_HIT == 0
+            if self.status & PPU::STATUS_SPRITE_ZERO_HIT == 0
                 && let Some(hit_cycle) = self.sprite_zero_hit_cycle
                 && old_cycles < hit_cycle as usize
                 && self.cycles >= hit_cycle as usize
             {
-                self.register_status |= PPU::STATUS_SPRITE_ZERO_HIT;
+                self.status |= PPU::STATUS_SPRITE_ZERO_HIT;
             }
 
             if self.cycles >= 341 {
@@ -246,8 +254,8 @@ impl PPU {
                 self.scanline += 1;
 
                 if self.scanline == 241 {
-                    self.register_status |= PPU::STATUS_VBLANK;
-                    if self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0 {
+                    self.status |= PPU::STATUS_VBLANK;
+                    if self.ctrl & PPU::CTRL_GENERATE_NMI != 0 {
                         self.nmi_interrupt = Some(1);
                     }
                 }
@@ -255,9 +263,9 @@ impl PPU {
                 if self.scanline >= 262 {
                     self.scanline = 0;
                     self.nmi_interrupt = None;
-                    self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
-                    self.register_status &= !PPU::STATUS_SPRITE_OVERFLOW;
-                    self.register_status &= !PPU::STATUS_VBLANK;
+                    self.status &= !PPU::STATUS_SPRITE_ZERO_HIT;
+                    self.status &= !PPU::STATUS_SPRITE_OVERFLOW;
+                    self.status &= !PPU::STATUS_VBLANK;
                 }
 
                 self.sprite_zero_hit_cycle = self.calc_sprite_zero_hit_cycle();
@@ -266,7 +274,7 @@ impl PPU {
     }
 
     fn draw_scanline_bg(&mut self, calc_only: bool) -> Vec<bool> {
-        if self.register_mask & PPU::MASK_SHOW_BG == 0 {
+        if self.mask & PPU::MASK_SHOW_BG == 0 {
             let backdrop = SYSTEM_PALETTE[self.palette[0] as usize];
             for x in 0..256usize {
                 self.frame.set_pixel(x, self.scanline as usize, backdrop);
@@ -280,7 +288,7 @@ impl PPU {
         let mut opaque = vec![false; 256];
 
         // draw background
-        let bank = if self.register_ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
+        let bank = if self.ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
             0x1000
         } else {
             0x0000
@@ -304,7 +312,7 @@ impl PPU {
                     continue;
                 }
 
-                if self.register_mask & PPU::MASK_SHOW_BG_LEFT == 0 && x_in_frame < 8 {
+                if self.mask & PPU::MASK_SHOW_BG_LEFT == 0 && x_in_frame < 8 {
                     value = 0;
                 }
 
@@ -327,11 +335,11 @@ impl PPU {
     }
 
     fn draw_scanline_sprites(&mut self) {
-        if self.register_mask & PPU::MASK_SHOW_SPRITES == 0 {
+        if self.mask & PPU::MASK_SHOW_SPRITES == 0 {
             return;
         }
 
-        let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
+        let bank: u16 = (self.ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
         let mut candidates: Vec<usize> = Vec::with_capacity(8);
         for i in (0..self.oam_data.len()).step_by(4) {
             let y = self.oam_data[i] as u16;
@@ -382,7 +390,7 @@ impl PPU {
                     continue;
                 }
 
-                if x_in_frame < 8 && self.register_mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
+                if x_in_frame < 8 && self.mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
                     continue;
                 }
 
@@ -404,9 +412,7 @@ impl PPU {
             return None;
         }
 
-        if self.register_mask & PPU::MASK_SHOW_BG == 0
-            || self.register_mask & PPU::MASK_SHOW_SPRITES == 0
-        {
+        if self.mask & PPU::MASK_SHOW_BG == 0 || self.mask & PPU::MASK_SHOW_SPRITES == 0 {
             return None;
         }
 
@@ -422,7 +428,7 @@ impl PPU {
         let flip_vertical = attr >> 7 & 1 == 1;
         let flip_horizontal = attr >> 6 & 1 == 1;
 
-        let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
+        let bank: u16 = (self.ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
         let y_in_sprite = if flip_vertical {
             7 - (self.scanline - sprite_y)
         } else {
@@ -454,10 +460,10 @@ impl PPU {
                 continue; // not hit on x=255
             }
             if screen_x < 8 {
-                if self.register_mask & PPU::MASK_SHOW_BG_LEFT == 0 {
+                if self.mask & PPU::MASK_SHOW_BG_LEFT == 0 {
                     continue;
                 }
-                if self.register_mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
+                if self.mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
                     continue;
                 }
             }
@@ -470,7 +476,7 @@ impl PPU {
     }
 
     fn update_sprite_overflow_flag(&mut self) {
-        if (self.register_mask & (PPU::MASK_SHOW_BG | PPU::MASK_SHOW_SPRITES)) == 0 {
+        if (self.mask & (PPU::MASK_SHOW_BG | PPU::MASK_SHOW_SPRITES)) == 0 {
             return;
         }
 
@@ -480,7 +486,7 @@ impl PPU {
             if self.scanline >= y && self.scanline < y + 8 {
                 count += 1;
                 if count > 8 {
-                    self.register_status |= PPU::STATUS_SPRITE_OVERFLOW;
+                    self.status |= PPU::STATUS_SPRITE_OVERFLOW;
                     return;
                 }
             }
@@ -684,8 +690,8 @@ mod test {
             // Don't forget to fix the read function if you fix this function!
             match addr {
                 0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 => self.open_bus_value,
-                0x2002 => self.register_status,
-                0x2004 => self.oam_data[self.register_oam_addr as usize],
+                0x2002 => self.status,
+                0x2004 => self.oam_data[self.oam_addr as usize],
                 0x2007 => self.peek_data(),
                 _ => {
                     panic!("Unknow address for the PPU registers: 0x{:x}", addr);
@@ -696,15 +702,15 @@ mod test {
         fn peek_data(&self) -> u8 {
             // like read_data, but without mut
             // Don't forget to fix read_data if you fix this function!
-            let addr = match self.register_addr {
-                0x3000..=0x3eff => self.register_addr - 0x1000, // mirror to 0x2000..=0x2eff
-                0x3f20..=0x3fff => self.register_addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
-                _ => self.register_addr,
+            let addr = match self.addr {
+                0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
+                0x3f20..=0x3fff => self.addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
+                _ => self.addr,
             };
 
             match addr {
-                0..=0x1fff => self.register_data,
-                0x2000..=0x2fff => self.register_data,
+                0..=0x1fff => self.data,
+                0x2000..=0x2fff => self.data,
                 0x3f00..=0x3f1f => self.palette[(addr - 0x3f00) as usize],
                 _ => panic!("unexpected access to mirrored space: 0x{:x}", addr),
             }
@@ -713,15 +719,15 @@ mod test {
         pub fn trace(&self) -> String {
             format!(
                 "CTRL:0x{:x} MASK:0x{:x} STATUS:0x{:x} OAM_ADDR:0x{:x} SCROLL_X:0x{:x} SCROLL_Y:0x{:x} ADDR:0x{:x} DATA:0x{:x} W:{}",
-                self.register_ctrl,
-                self.register_mask,
-                self.register_status,
-                self.register_oam_addr,
-                self.register_scroll.x,
-                self.register_scroll.y,
-                self.register_addr,
-                self.register_data,
-                self.internal_w as usize,
+                self.ctrl,
+                self.mask,
+                self.status,
+                self.oam_addr,
+                self.scroll.x,
+                self.scroll.y,
+                self.addr,
+                self.data,
+                self.w as usize,
             )
         }
     }
@@ -731,27 +737,27 @@ mod test {
         let chr_rom = vec![];
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
-        assert!(!ppu.internal_w);
+        assert!(!ppu.w);
         ppu.write(0x2006, 0x11);
-        assert!(ppu.internal_w);
+        assert!(ppu.w);
         ppu.write(0x2006, 0x22);
-        assert!(!ppu.internal_w);
-        assert_eq!(ppu.register_addr, 0x1122);
+        assert!(!ppu.w);
+        assert_eq!(ppu.addr, 0x1122);
         ppu.write(0x2006, 0x54);
-        assert!(ppu.internal_w);
-        assert_eq!(ppu.register_addr, 0x1422); // masked by 0x3fff
+        assert!(ppu.w);
+        assert_eq!(ppu.addr, 0x1422); // masked by 0x3fff
 
-        ppu.write(0x2005, 0x44); // write to y because internal_w is shared
-        assert!(!ppu.internal_w);
-        assert_eq!(ppu.register_scroll.y, 0x44);
+        ppu.write(0x2005, 0x44); // write to y because w is shared
+        assert!(!ppu.w);
+        assert_eq!(ppu.scroll.y, 0x44);
 
         ppu.write(0x2005, 0x55);
-        assert!(ppu.internal_w);
-        assert_eq!(ppu.register_scroll.y, 0x44);
-        assert_eq!(ppu.register_scroll.x, 0x55);
+        assert!(ppu.w);
+        assert_eq!(ppu.scroll.y, 0x44);
+        assert_eq!(ppu.scroll.x, 0x55);
 
-        ppu.read(0x2002); // reading status register clears the internal_w
-        assert!(!ppu.internal_w);
+        ppu.read(0x2002); // reading status register clears the w
+        assert!(!ppu.w);
     }
 
     #[test]
@@ -759,22 +765,22 @@ mod test {
         let chr_rom = vec![];
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
-        assert!(!ppu.internal_w);
+        assert!(!ppu.w);
         ppu.write(0x2006, 0x11);
-        assert!(ppu.internal_w);
+        assert!(ppu.w);
         ppu.write(0x2006, 0x22);
-        assert!(!ppu.internal_w);
-        assert_eq!(ppu.register_addr, 0x1122);
+        assert!(!ppu.w);
+        assert_eq!(ppu.addr, 0x1122);
 
         ppu.increment_addr_register();
-        assert!(!ppu.internal_w);
-        assert_eq!(ppu.register_addr, 0x1123);
+        assert!(!ppu.w);
+        assert_eq!(ppu.addr, 0x1123);
 
-        ppu.register_ctrl |= PPU::CTRL_VRAM_ADD_INCREMENT;
+        ppu.ctrl |= PPU::CTRL_VRAM_ADD_INCREMENT;
 
         ppu.increment_addr_register();
-        assert!(!ppu.internal_w);
-        assert_eq!(ppu.register_addr, 0x1143);
+        assert!(!ppu.w);
+        assert_eq!(ppu.addr, 0x1143);
     }
 
     #[test]
@@ -797,9 +803,9 @@ mod test {
         let mut ppu = PPU::new(chr_rom, Mirroring::Vertical);
 
         ppu.write(0x2003, 12);
-        assert_eq!(ppu.register_oam_addr, 12);
+        assert_eq!(ppu.oam_addr, 12);
         ppu.write(0x2004, 55);
-        assert_eq!(ppu.register_oam_addr, 13);
+        assert_eq!(ppu.oam_addr, 13);
         assert_eq!(ppu.oam_data[12], 55);
     }
 }
