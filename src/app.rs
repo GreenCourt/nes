@@ -151,7 +151,7 @@ impl eframe::App for NesApp {
         ui.add_space(4.0);
 
         if let Some(nes) = &mut self.nes {
-            let pixels: Vec<egui::Color32> = get_pixels(&nes.get_frame());
+            let pixels: Vec<egui::Color32> = get_pixels(nes.get_frame());
 
             let color_image = egui::ColorImage {
                 size: [NES_WIDTH, NES_HEIGHT],

@@ -21,6 +21,9 @@ pub struct PPU {
     scanline: u16,
     cycles: usize,
     pub nmi_interrupt: Option<u8>,
+
+    frame: Frame,
+    sprite_zero_hit_cycle: Option<u16>,
 }
 
 #[derive(Default)]
@@ -49,6 +52,8 @@ impl PPU {
             cycles: 0,
             scanline: 0,
             nmi_interrupt: None,
+            frame: Frame::new(),
+            sprite_zero_hit_cycle: None,
         }
     }
 
@@ -61,9 +66,14 @@ impl PPU {
     const _CTRL_MASTER_SLAVE_SELECT: u8 = 0b0100_0000;
     const CTRL_GENERATE_NMI: u8 = 0b1000_0000;
 
-    const _STATUS_SPRITE_OVERFLOW: u8 = 0b0010_0000;
+    const STATUS_SPRITE_OVERFLOW: u8 = 0b0010_0000;
     const STATUS_SPRITE_ZERO_HIT: u8 = 0b0100_0000;
     const STATUS_VBLANK: u8 = 0b1000_0000;
+
+    const MASK_SHOW_BG_LEFT: u8 = 0b0000_0010;
+    const MASK_SHOW_SPRITES_LEFT: u8 = 0b0000_0100;
+    const MASK_SHOW_BG: u8 = 0b0000_1000;
+    const MASK_SHOW_SPRITES: u8 = 0b0001_0000;
 
     pub fn read(&mut self, addr: u16) -> u8 {
         // Don't forget to fix the peek function if you fix this function!
@@ -205,25 +215,274 @@ impl PPU {
     }
 
     pub fn tick(&mut self, cycles: u8) {
-        self.cycles += cycles as usize;
-        if self.cycles >= 341 {
-            self.cycles -= 341;
-            self.scanline += 1;
+        let mut remaining = cycles as usize;
 
-            if self.scanline == 241 {
-                self.register_status |= PPU::STATUS_VBLANK;
-                self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
+        while remaining > 0 {
+            // loop for each scanline
+            let cycles_for_current_scanline = remaining.min(341 - self.cycles);
 
-                if self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0 {
-                    self.nmi_interrupt = Some(1);
+            let old_cycles = self.cycles;
+            self.cycles += cycles_for_current_scanline;
+            remaining -= cycles_for_current_scanline;
+
+            if self.register_status & PPU::STATUS_SPRITE_ZERO_HIT == 0
+                && let Some(hit_cycle) = self.sprite_zero_hit_cycle
+                && old_cycles < hit_cycle as usize
+                && self.cycles >= hit_cycle as usize
+            {
+                self.register_status |= PPU::STATUS_SPRITE_ZERO_HIT;
+            }
+
+            if self.cycles >= 341 {
+                // proceed to next scanline
+                self.cycles -= 341;
+
+                if self.scanline < 240 {
+                    self.draw_scanline_bg(false);
+                    self.draw_scanline_sprites();
+                    self.update_sprite_overflow_flag();
+                }
+
+                self.scanline += 1;
+
+                if self.scanline == 241 {
+                    self.register_status |= PPU::STATUS_VBLANK;
+                    if self.register_ctrl & PPU::CTRL_GENERATE_NMI != 0 {
+                        self.nmi_interrupt = Some(1);
+                    }
+                }
+
+                if self.scanline >= 262 {
+                    self.scanline = 0;
+                    self.nmi_interrupt = None;
+                    self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
+                    self.register_status &= !PPU::STATUS_SPRITE_OVERFLOW;
+                    self.register_status &= !PPU::STATUS_VBLANK;
+                }
+
+                self.sprite_zero_hit_cycle = self.calc_sprite_zero_hit_cycle();
+            }
+        }
+    }
+
+    fn draw_scanline_bg(&mut self, calc_only: bool) -> Vec<bool> {
+        if self.register_mask & PPU::MASK_SHOW_BG == 0 {
+            let backdrop = SYSTEM_PALETTE[self.palette[0] as usize];
+            for x in 0..256usize {
+                self.frame.set_pixel(x, self.scanline as usize, backdrop);
+            }
+            return vec![false; 256];
+        }
+
+        let tile_row = (self.scanline / 8) as usize;
+        let y_in_tile = (self.scanline % 8) as usize;
+
+        let mut opaque = vec![false; 256];
+
+        // draw background
+        let bank = if self.register_ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
+            0x1000
+        } else {
+            0x0000
+        };
+        for tile_col in 0..32usize {
+            let tile_number = self.vram[tile_row * 32 + tile_col] as u16;
+            let tile = &self.chr_rom
+                [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
+            let palette = self.bg_palette(tile_col, tile_row);
+
+            let mut upper = tile[y_in_tile];
+            let mut lower = tile[y_in_tile + 8];
+
+            for x_in_tile in (0..=7).rev() {
+                let mut value = (1 & upper) << 1 | (1 & lower);
+                upper >>= 1;
+                lower >>= 1;
+
+                let x_in_frame = tile_col * 8 + x_in_tile;
+                if x_in_frame > 256 {
+                    continue;
+                }
+
+                if self.register_mask & PPU::MASK_SHOW_BG_LEFT == 0 && x_in_frame < 8 {
+                    value = 0;
+                }
+
+                let rgb = match value {
+                    0 => SYSTEM_PALETTE[self.palette[0] as usize],
+                    1 => SYSTEM_PALETTE[palette[1] as usize],
+                    2 => SYSTEM_PALETTE[palette[2] as usize],
+                    3 => SYSTEM_PALETTE[palette[3] as usize],
+                    _ => panic!("unreachable"),
+                };
+
+                opaque[x_in_frame] = value != 0;
+                if !calc_only {
+                    self.frame
+                        .set_pixel(x_in_frame, self.scanline as usize, rgb);
+                }
+            }
+        }
+        opaque
+    }
+
+    fn draw_scanline_sprites(&mut self) {
+        if self.register_mask & PPU::MASK_SHOW_SPRITES == 0 {
+            return;
+        }
+
+        let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
+        let mut candidates: Vec<usize> = Vec::with_capacity(8);
+        for i in (0..self.oam_data.len()).step_by(4) {
+            let y = self.oam_data[i] as u16;
+            if self.scanline >= y && self.scanline < y + 8 {
+                candidates.push(i);
+                if candidates.len() == 8 {
+                    break; // max 8 sprites for single line
+                }
+            }
+        }
+
+        for &i in candidates.iter().rev() {
+            let tile_number = self.oam_data[i + 1] as u16;
+            let sprite_y = self.oam_data[i] as u16;
+            let sprite_x = self.oam_data[i + 3] as usize;
+            let attr = self.oam_data[i + 2];
+
+            let flip_vertical = attr >> 7 & 1 == 1;
+            let flip_horizontal = attr >> 6 & 1 == 1;
+            let pallette_idx = attr & 0b11;
+            let sprite_palette = self.sprite_palette(pallette_idx);
+
+            let y_in_sprite = if flip_vertical {
+                7 - (self.scanline - sprite_y)
+            } else {
+                self.scanline - sprite_y
+            } as usize;
+
+            let tile = &self.chr_rom
+                [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
+            let mut upper = tile[y_in_sprite];
+            let mut lower = tile[y_in_sprite + 8];
+
+            for x in (0..=7).rev() {
+                let value = (1 & lower) << 1 | (1 & upper);
+                upper >>= 1;
+                lower >>= 1;
+                if value == 0 {
+                    continue; // transparent pixels
+                }
+
+                let x_in_frame = if flip_horizontal {
+                    sprite_x + 7 - x
+                } else {
+                    sprite_x + x
+                };
+                if x_in_frame >= 256 {
+                    continue;
+                }
+
+                if x_in_frame < 8 && self.register_mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
+                    continue;
+                }
+
+                let rgb = match value {
+                    1 => SYSTEM_PALETTE[sprite_palette[1] as usize],
+                    2 => SYSTEM_PALETTE[sprite_palette[2] as usize],
+                    3 => SYSTEM_PALETTE[sprite_palette[3] as usize],
+                    _ => unreachable!(),
+                };
+
+                self.frame
+                    .set_pixel(x_in_frame, self.scanline as usize, rgb);
+            }
+        }
+    }
+
+    fn calc_sprite_zero_hit_cycle(&mut self) -> Option<u16> {
+        if self.scanline >= 240 {
+            return None;
+        }
+
+        if self.register_mask & PPU::MASK_SHOW_BG == 0
+            || self.register_mask & PPU::MASK_SHOW_SPRITES == 0
+        {
+            return None;
+        }
+
+        let sprite_y = self.oam_data[0] as u16;
+        if self.scanline < sprite_y || self.scanline >= sprite_y + 8 {
+            // sprite zero is not on current scanline
+            return None;
+        }
+
+        let tile_number = self.oam_data[1] as u16;
+        let attr = self.oam_data[2];
+        let sprite_x = self.oam_data[3] as usize;
+        let flip_vertical = attr >> 7 & 1 == 1;
+        let flip_horizontal = attr >> 6 & 1 == 1;
+
+        let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
+        let y_in_sprite = if flip_vertical {
+            7 - (self.scanline - sprite_y)
+        } else {
+            self.scanline - sprite_y
+        } as usize;
+
+        let tile = &self.chr_rom
+            [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
+        let mut upper = tile[y_in_sprite];
+        let mut lower = tile[y_in_sprite + 8];
+
+        let bg_opaque = self.draw_scanline_bg(true);
+
+        for x in (0..=7).rev() {
+            let value = (1 & lower) << 1 | (1 & upper);
+            upper >>= 1;
+            lower >>= 1;
+            if value == 0 {
+                continue;
+            }
+
+            let screen_x = if flip_horizontal {
+                sprite_x + 7 - x
+            } else {
+                sprite_x + x
+            };
+
+            if screen_x >= 255 {
+                continue; // not hit on x=255
+            }
+            if screen_x < 8 {
+                if self.register_mask & PPU::MASK_SHOW_BG_LEFT == 0 {
+                    continue;
+                }
+                if self.register_mask & PPU::MASK_SHOW_SPRITES_LEFT == 0 {
+                    continue;
                 }
             }
 
-            if self.scanline >= 262 {
-                self.scanline = 0;
-                self.nmi_interrupt = None;
-                self.register_status &= !PPU::STATUS_SPRITE_ZERO_HIT;
-                self.register_status &= !PPU::STATUS_VBLANK;
+            if bg_opaque[screen_x] {
+                return Some((screen_x + 1) as u16); // +1 is requied
+            }
+        }
+        None
+    }
+
+    fn update_sprite_overflow_flag(&mut self) {
+        if (self.register_mask & (PPU::MASK_SHOW_BG | PPU::MASK_SHOW_SPRITES)) == 0 {
+            return;
+        }
+
+        let mut count = 0;
+        for i in (0..self.oam_data.len()).step_by(4) {
+            let y = self.oam_data[i] as u16;
+            if self.scanline >= y && self.scanline < y + 8 {
+                count += 1;
+                if count > 8 {
+                    self.register_status |= PPU::STATUS_SPRITE_OVERFLOW;
+                    return;
+                }
             }
         }
     }
@@ -232,88 +491,8 @@ impl PPU {
         self.nmi_interrupt.take()
     }
 
-    pub fn get_frame(&self) -> Frame {
-        //self.render_tiles()
-        self.render_nametable()
-    }
-
-    pub fn render_nametable(&self) -> Frame {
-        let mut frame = Frame::new();
-
-        // draw background
-        let bank = if self.register_ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
-            0x1000
-        } else {
-            0x0000
-        };
-        for i in 0..0x03c0 {
-            let tile_number = self.vram[i] as u16;
-            let tile_x = i % 32;
-            let tile_y = i / 32;
-            let tile = &self.chr_rom
-                [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
-            let palette = self.bg_palette(tile_x, tile_y);
-
-            for y in 0..=7 {
-                let mut upper = tile[y];
-                let mut lower = tile[y + 8];
-
-                for x in (0..=7).rev() {
-                    let value = (1 & upper) << 1 | (1 & lower);
-                    upper >>= 1;
-                    lower >>= 1;
-                    let rgb = match value {
-                        0 => SYSTEM_PALETTE[self.palette[0] as usize],
-                        1 => SYSTEM_PALETTE[palette[1] as usize],
-                        2 => SYSTEM_PALETTE[palette[2] as usize],
-                        3 => SYSTEM_PALETTE[palette[3] as usize],
-                        _ => panic!("unreachable"),
-                    };
-                    frame.set_pixel(tile_x * 8 + x, tile_y * 8 + y, rgb);
-                }
-            }
-        }
-
-        // draw sprites
-        for i in (0..self.oam_data.len()).step_by(4).rev() {
-            let tile_number = self.oam_data[i + 1] as u16;
-            let tile_x = self.oam_data[i + 3] as usize;
-            let tile_y = self.oam_data[i] as usize;
-
-            let flip_vertical = self.oam_data[i + 2] >> 7 & 1 == 1;
-            let flip_horizontal = self.oam_data[i + 2] >> 6 & 1 == 1;
-            let pallette_idx = self.oam_data[i + 2] & 0b11;
-            let sprite_palette = self.sprite_palette(pallette_idx);
-
-            let bank: u16 = (self.register_ctrl & PPU::CTRL_SPRITE_PATTERN_ADDR) as u16;
-
-            let tile = &self.chr_rom
-                [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
-
-            for y in 0..=7 {
-                let mut upper = tile[y];
-                let mut lower = tile[y + 8];
-                'xfor: for x in (0..=7).rev() {
-                    let value = (1 & lower) << 1 | (1 & upper);
-                    upper >>= 1;
-                    lower >>= 1;
-                    let rgb = match value {
-                        0 => continue 'xfor,
-                        1 => SYSTEM_PALETTE[sprite_palette[1] as usize],
-                        2 => SYSTEM_PALETTE[sprite_palette[2] as usize],
-                        3 => SYSTEM_PALETTE[sprite_palette[3] as usize],
-                        _ => panic!("unreachable"),
-                    };
-                    match (flip_horizontal, flip_vertical) {
-                        (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
-                        (true, false) => frame.set_pixel(tile_x + 7 - x, tile_y + y, rgb),
-                        (false, true) => frame.set_pixel(tile_x + x, tile_y + 7 - y, rgb),
-                        (true, true) => frame.set_pixel(tile_x + 7 - x, tile_y + 7 - y, rgb),
-                    }
-                }
-            }
-        }
-        frame
+    pub fn get_frame(&self) -> &Frame {
+        &self.frame
     }
 
     pub fn render_tiles(&self) -> Frame {

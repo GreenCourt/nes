@@ -104,7 +104,7 @@ impl Bus {
         self.cycles
     }
 
-    pub fn get_frame(&self) -> Frame {
+    pub fn get_frame(&self) -> &Frame {
         self.ppu.get_frame()
     }
 

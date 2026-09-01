@@ -30,7 +30,7 @@ impl Nes {
         self.overshoot_cycles = elapsed_cycles - cycles_to_elapse;
     }
 
-    pub fn get_frame(&self) -> Frame {
+    pub fn get_frame(&self) -> &Frame {
         self.cpu.bus.get_frame()
     }
 
