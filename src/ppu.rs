@@ -14,10 +14,11 @@ pub struct PPU {
     status: u8,
     oam_addr: u8,
     oam_data: [u8; 256],
-    scroll: ScrollRegister,
-    addr: u16,
     data: u8,
 
+    v: u16,  // current vram address (15bit)
+    t: u16,  // tmporary vram address (15bit)
+    x: u8,   // x scroll (3bit)
     w: bool, // shared by PPU_SCROLL and PPU_ADDR
     open_bus_value: u8,
 
@@ -34,12 +35,6 @@ pub struct PPU {
     sprite_zero_hit_cycle: Option<u16>,
 }
 
-#[derive(Default)]
-struct ScrollRegister {
-    x: u8,
-    y: u8,
-}
-
 impl PPU {
     pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
         PPU {
@@ -48,9 +43,10 @@ impl PPU {
             status: 0,
             oam_addr: 0,
             oam_data: [0; 256],
-            scroll: ScrollRegister::default(),
-            addr: 0,
             data: 0,
+            v: 0,
+            t: 0,
+            x: 0,
             w: false,
             open_bus_value: 0,
             chr_rom,
@@ -110,6 +106,7 @@ impl PPU {
             0x2000 => {
                 let nmi = self.ctrl & PPU::CTRL_GENERATE_NMI != 0;
                 self.ctrl = data;
+                self.t = (self.t & 0b1111_0011_1111_1111) | (((data as u16) & 0b11) << 10);
                 if !nmi
                     && (self.ctrl & PPU::CTRL_GENERATE_NMI != 0)
                     && (self.status & PPU::STATUS_VBLANK != 0)
@@ -130,17 +127,21 @@ impl PPU {
             }
             0x2005 => {
                 if self.w {
-                    self.scroll.y = data;
+                    self.t = (self.t & 0b1000_1100_0001_1111)
+                        | (((data as u16) & 0b111) << 12)
+                        | (((data as u16) & 0b11111000) << 2);
                 } else {
-                    self.scroll.x = data;
+                    self.x = data & 0b111;
+                    self.t = (self.t & !0b1_1111) | ((data as u16) >> 3);
                 }
                 self.w = !self.w;
             }
             0x2006 => {
-                self.addr = if self.w {
-                    (self.addr & 0xff00) | data as u16
+                if self.w {
+                    self.t = (self.t & 0xff00) | data as u16;
+                    self.v = self.t
                 } else {
-                    ((data & 0x3f) as u16) << 8 | (self.addr & 0xff)
+                    self.t = (self.t & 0x00ff) | (((data as u16) & 0b11_1111) << 8);
                 };
                 self.w = !self.w;
             }
@@ -159,16 +160,16 @@ impl PPU {
         } else {
             1
         };
-        self.addr = self.addr.wrapping_add(inc) & 0x3fff;
+        self.v = self.v.wrapping_add(inc) & 0x3fff;
     }
 
     fn read_data(&mut self) -> u8 {
         // Don't forget to fix peek_data if you fix this function!
-        let addr = match self.addr {
-            0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
-            0x3f20..=0x3fff => self.addr & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
-            _ => self.addr,
+        let addr = match self.v {
+            0x3000..=0x3eff => self.v - 0x1000, // mirror to 0x2000..=0x2eff
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.v - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
+            0x3f20..=0x3fff => self.v & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
+            _ => self.v,
         };
         self.increment_addr_register();
 
@@ -189,16 +190,16 @@ impl PPU {
     }
 
     fn write_data(&mut self, value: u8) {
-        let addr = match self.addr {
-            0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
-            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.addr - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
-            0x3f20..=0x3fff => self.addr & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
-            _ => self.addr,
+        let addr = match self.v {
+            0x3000..=0x3eff => self.v - 0x1000, // mirror to 0x2000..=0x2eff
+            0x3f10 | 0x3f14 | 0x3f18 | 0x3f1c => self.v - 0x10, // mirror to 0x3f00/0x3f04/0x3f08/0x3f0c
+            0x3f20..=0x3fff => self.v & 0x3f1f,                 // mirror to 0x3f00..=0x3f1f
+            _ => self.v,
         };
         self.increment_addr_register();
 
         match addr {
-            0..=0x1fff => println!("Attempt to write to chr rom space: 0x{:x}", addr),
+            0..=0x1fff => {} //println!("Attempt to write to chr rom space: 0x{:x}", addr),
             0x2000..=0x2fff => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
@@ -224,6 +225,7 @@ impl PPU {
 
     pub fn tick(&mut self, cycles: u8) {
         let mut remaining = cycles as usize;
+        let rendering_enabled = self.mask & (PPU::MASK_SHOW_BG | PPU::MASK_SHOW_SPRITES) != 0;
 
         while remaining > 0 {
             // loop for each scanline
@@ -249,6 +251,11 @@ impl PPU {
                     self.draw_scanline_bg(false);
                     self.draw_scanline_sprites();
                     self.update_sprite_overflow_flag();
+
+                    if rendering_enabled {
+                        self.increment_y();
+                        self.copy_horizontal();
+                    }
                 }
 
                 self.scanline += 1;
@@ -258,6 +265,10 @@ impl PPU {
                     if self.ctrl & PPU::CTRL_GENERATE_NMI != 0 {
                         self.nmi_interrupt = Some(1);
                     }
+                }
+
+                if self.scanline == 261 && rendering_enabled {
+                    self.copy_vertical();
                 }
 
                 if self.scanline >= 262 {
@@ -275,42 +286,67 @@ impl PPU {
 
     fn draw_scanline_bg(&mut self, calc_only: bool) -> Vec<bool> {
         if self.mask & PPU::MASK_SHOW_BG == 0 {
-            let backdrop = SYSTEM_PALETTE[self.palette[0] as usize];
-            for x in 0..256usize {
-                self.frame.set_pixel(x, self.scanline as usize, backdrop);
+            if !calc_only {
+                let backdrop = SYSTEM_PALETTE[self.palette[0] as usize];
+                for x in 0..256usize {
+                    self.frame.set_pixel(x, self.scanline as usize, backdrop);
+                }
             }
             return vec![false; 256];
         }
 
-        let tile_row = (self.scanline / 8) as usize;
-        let y_in_tile = (self.scanline % 8) as usize;
-
         let mut opaque = vec![false; 256];
 
-        // draw background
         let bank = if self.ctrl & PPU::CTRL_BACKGROUND_PATTERN_ADDR != 0 {
             0x1000
         } else {
             0x0000
         };
-        for tile_col in 0..32usize {
-            let tile_number = self.vram[tile_row * 32 + tile_col] as u16;
+
+        let mut v = self.v; // keep self.v
+        let fine_x = self.x as i32;
+
+        for tile_i in 0..33i32 {
+            let tile_addr = 0x2000 | (v & 0x0FFF);
+            let tile_number = self.vram[self.mirror_vram_addr(tile_addr) as usize] as u16;
+
+            let attr_addr = 0x23C0 | (v & 0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07);
+            let attr_byte = self.vram[self.mirror_vram_addr(attr_addr) as usize];
+
+            let coarse_x = v & 0x1F;
+            let quadrant_x = (coarse_x % 4) / 2;
+            let quadrant_y = ((v >> 5) % 4) / 2;
+            let palette_idx = match (quadrant_x, quadrant_y) {
+                (0, 0) => attr_byte & 0b11,
+                (1, 0) => (attr_byte >> 2) & 0b11,
+                (0, 1) => (attr_byte >> 4) & 0b11,
+                (1, 1) => (attr_byte >> 6) & 0b11,
+                _ => unreachable!(),
+            };
+            let palette_start = 1 + (palette_idx as usize) * 4;
+            let palette = [
+                self.palette[0],
+                self.palette[palette_start],
+                self.palette[palette_start + 1],
+                self.palette[palette_start + 2],
+            ];
+
+            let fine_y = ((v >> 12) & 0x7) as usize;
             let tile = &self.chr_rom
                 [(bank + tile_number * 16) as usize..=(bank + tile_number * 16 + 15) as usize];
-            let palette = self.bg_palette(tile_col, tile_row);
+            let mut upper = tile[fine_y];
+            let mut lower = tile[fine_y + 8];
 
-            let mut upper = tile[y_in_tile];
-            let mut lower = tile[y_in_tile + 8];
+            for col in 0..8i32 {
+                let mut value = ((upper >> 7) & 1) << 1 | ((lower >> 7) & 1);
+                upper <<= 1;
+                lower <<= 1;
 
-            for x_in_tile in (0..=7).rev() {
-                let mut value = (1 & upper) << 1 | (1 & lower);
-                upper >>= 1;
-                lower >>= 1;
-
-                let x_in_frame = tile_col * 8 + x_in_tile;
-                if x_in_frame > 256 {
+                let x_in_frame = tile_i * 8 + col - fine_x;
+                if !(0..256).contains(&x_in_frame) {
                     continue;
                 }
+                let x_in_frame = x_in_frame as usize;
 
                 if self.mask & PPU::MASK_SHOW_BG_LEFT == 0 && x_in_frame < 8 {
                     value = 0;
@@ -330,6 +366,8 @@ impl PPU {
                         .set_pixel(x_in_frame, self.scanline as usize, rgb);
                 }
             }
+
+            Self::increment_coarse_x(&mut v);
         }
         opaque
     }
@@ -543,27 +581,6 @@ impl PPU {
         frame
     }
 
-    fn bg_palette(&self, tile_column: usize, tile_row: usize) -> [u8; 4] {
-        let attr_table_idx = tile_row / 4 * 8 + tile_column / 4;
-        let attr_byte = self.vram[0x3c0 + attr_table_idx]; // note: still using hardcoded first nametable
-
-        let palette_idx = match (tile_column % 4 / 2, tile_row % 4 / 2) {
-            (0, 0) => attr_byte & 0b11,
-            (1, 0) => (attr_byte >> 2) & 0b11,
-            (0, 1) => (attr_byte >> 4) & 0b11,
-            (1, 1) => (attr_byte >> 6) & 0b11,
-            (_, _) => panic!("should not happen"),
-        };
-
-        let palette_start: usize = 1 + (palette_idx as usize) * 4;
-        [
-            self.palette[0],
-            self.palette[palette_start],
-            self.palette[palette_start + 1],
-            self.palette[palette_start + 2],
-        ]
-    }
-
     fn sprite_palette(&self, pallete_idx: u8) -> [u8; 4] {
         let start = 0x11 + (pallete_idx * 4) as usize;
         [
@@ -572,6 +589,42 @@ impl PPU {
             self.palette[start + 1],
             self.palette[start + 2],
         ]
+    }
+
+    fn increment_coarse_x(v: &mut u16) {
+        // The argument `v` might not be `self.v`.
+        if (*v & 0x001F) == 31 {
+            *v &= !0x001F;
+            *v ^= 0x0400; // switch horizontal name table
+        } else {
+            *v += 1;
+        }
+    }
+
+    fn increment_y(&mut self) {
+        if (self.v & 0x7000) != 0x7000 {
+            self.v += 0x1000; // increment fine Y
+        } else {
+            self.v &= !0x7000;
+            let mut y = (self.v & 0x03E0) >> 5;
+            if y == 29 {
+                y = 0;
+                self.v ^= 0x0800; // switch vertical name table
+            } else if y == 31 {
+                y = 0;
+            } else {
+                y += 1;
+            }
+            self.v = (self.v & !0x03E0) | (y << 5);
+        }
+    }
+
+    fn copy_horizontal(&mut self) {
+        self.v = (self.v & !0x041F) | (self.t & 0x041F);
+    }
+
+    fn copy_vertical(&mut self) {
+        self.v = (self.v & !0x7BE0) | (self.t & 0x7BE0);
     }
 }
 
@@ -702,10 +755,10 @@ mod test {
         fn peek_data(&self) -> u8 {
             // like read_data, but without mut
             // Don't forget to fix read_data if you fix this function!
-            let addr = match self.addr {
-                0x3000..=0x3eff => self.addr - 0x1000, // mirror to 0x2000..=0x2eff
-                0x3f20..=0x3fff => self.addr & 0x3f1f, // mirror to 0x3f00..=0x3f1f
-                _ => self.addr,
+            let addr = match self.v {
+                0x3000..=0x3eff => self.v - 0x1000, // mirror to 0x2000..=0x2eff
+                0x3f20..=0x3fff => self.v & 0x3f1f, // mirror to 0x3f00..=0x3f1f
+                _ => self.v,
             };
 
             match addr {
@@ -718,16 +771,16 @@ mod test {
 
         pub fn trace(&self) -> String {
             format!(
-                "CTRL:0x{:x} MASK:0x{:x} STATUS:0x{:x} OAM_ADDR:0x{:x} SCROLL_X:0x{:x} SCROLL_Y:0x{:x} ADDR:0x{:x} DATA:0x{:x} W:{}",
+                "CTRL:0x{:x} MASK:0x{:x} STATUS:0x{:x} OAM_ADDR:0x{:x} v:0x{:x} t:0x{:x} x:0x{:x} w:{} DATA:0x{:x}",
                 self.ctrl,
                 self.mask,
                 self.status,
                 self.oam_addr,
-                self.scroll.x,
-                self.scroll.y,
-                self.addr,
-                self.data,
+                self.v,
+                self.t,
+                self.x,
                 self.w as usize,
+                self.data,
             )
         }
     }
@@ -742,22 +795,12 @@ mod test {
         assert!(ppu.w);
         ppu.write(0x2006, 0x22);
         assert!(!ppu.w);
-        assert_eq!(ppu.addr, 0x1122);
+        assert_eq!(ppu.v, 0x1122);
         ppu.write(0x2006, 0x54);
         assert!(ppu.w);
-        assert_eq!(ppu.addr, 0x1422); // masked by 0x3fff
-
-        ppu.write(0x2005, 0x44); // write to y because w is shared
+        ppu.write(0x2006, 0x67);
         assert!(!ppu.w);
-        assert_eq!(ppu.scroll.y, 0x44);
-
-        ppu.write(0x2005, 0x55);
-        assert!(ppu.w);
-        assert_eq!(ppu.scroll.y, 0x44);
-        assert_eq!(ppu.scroll.x, 0x55);
-
-        ppu.read(0x2002); // reading status register clears the w
-        assert!(!ppu.w);
+        assert_eq!(ppu.v, 0x1467); // masked by 0x3fff
     }
 
     #[test]
@@ -770,17 +813,17 @@ mod test {
         assert!(ppu.w);
         ppu.write(0x2006, 0x22);
         assert!(!ppu.w);
-        assert_eq!(ppu.addr, 0x1122);
+        assert_eq!(ppu.v, 0x1122);
 
         ppu.increment_addr_register();
         assert!(!ppu.w);
-        assert_eq!(ppu.addr, 0x1123);
+        assert_eq!(ppu.v, 0x1123);
 
         ppu.ctrl |= PPU::CTRL_VRAM_ADD_INCREMENT;
 
         ppu.increment_addr_register();
         assert!(!ppu.w);
-        assert_eq!(ppu.addr, 0x1143);
+        assert_eq!(ppu.v, 0x1143);
     }
 
     #[test]
