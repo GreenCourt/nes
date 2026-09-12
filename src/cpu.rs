@@ -759,6 +759,46 @@ impl CPU {
         self.update_negative_flag(self.register_a);
     }
 
+    fn alr(&mut self, mode: &AddressingMode) {
+        // (unofficial) AND with Accumulator, then shift right 1-bit
+        let (addr, _) = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a &= value;
+        self.set_carry_flag(self.register_a & 1 == 1);
+        self.register_a >>= 1;
+        self.update_zero_flag(self.register_a);
+        self.update_negative_flag(self.register_a);
+    }
+
+    fn anc(&mut self, mode: &AddressingMode) {
+        // (unofficial) AND byte with accumulator. If result is negative then carry is set.
+        let (addr, _) = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a &= value;
+        self.update_zero_flag(self.register_a);
+        self.update_negative_flag(self.register_a);
+        self.set_carry_flag(self.get_negative_flag());
+    }
+
+    fn ane(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: ANE");
+    }
+
+    fn arr(&mut self, mode: &AddressingMode) {
+        // (unofficial)
+        let (addr, _) = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.register_a =
+            ((self.register_a & value) >> 1) | if self.get_carry_flag() { 0x80 } else { 0x00 };
+        self.update_zero_flag(self.register_a);
+        self.update_negative_flag(self.register_a);
+        self.set_carry_flag((self.register_a & 0x40) == 0x40);
+        self.set_overflow_flag(
+            ((self.register_a & 0x40) ^ ((self.register_a & 0x20) << 1)) == 0x40,
+        );
+    }
+
     fn dcp(&mut self, mode: &AddressingMode) {
         // (unofficial) DEC then CMP
         self.dec(mode);
@@ -771,10 +811,25 @@ impl CPU {
         self.sbc(mode, true);
     }
 
+    fn kil(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: KIL");
+    }
+
+    fn las(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: LAS");
+    }
+
     fn lax(&mut self, mode: &AddressingMode) {
         // (unofficial) LDA then TAX
         self.lda(mode);
         self.tax();
+    }
+
+    fn lxa(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: LXA");
     }
 
     fn rla(&mut self, mode: &AddressingMode) {
@@ -795,6 +850,26 @@ impl CPU {
         self.mem_write(addr, self.register_a & self.register_x);
     }
 
+    fn sbx(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: SBX");
+    }
+
+    fn sha(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: SHA");
+    }
+
+    fn shx(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: SHX");
+    }
+
+    fn shy(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: SHY");
+    }
+
     fn slo(&mut self, mode: &AddressingMode) {
         // (unofficial) ASL the ORA
         self.asl(mode);
@@ -805,6 +880,11 @@ impl CPU {
         // (unofficial) LSR the EOR
         self.lsr(mode);
         self.eor(mode, true);
+    }
+
+    fn tas(&mut self) {
+        // (unofficial)
+        panic!("unsupported opcode: SHY");
     }
 
     fn interrupt_nmi(&mut self) {
@@ -893,14 +973,26 @@ impl CPU {
             Mnemonic::TXS => self.txs(),
             Mnemonic::TYA => self.tya(),
             // --- unofficial ---
+            Mnemonic::ALR => self.alr(&instruction.addressing_mode),
+            Mnemonic::ANC => self.anc(&instruction.addressing_mode),
+            Mnemonic::ANE => self.ane(),
+            Mnemonic::ARR => self.arr(&instruction.addressing_mode),
             Mnemonic::DCP => self.dcp(&instruction.addressing_mode),
             Mnemonic::ISB => self.isb(&instruction.addressing_mode),
+            Mnemonic::KIL => self.kil(),
+            Mnemonic::LAS => self.las(),
             Mnemonic::LAX => self.lax(&instruction.addressing_mode),
+            Mnemonic::LXA => self.lxa(),
             Mnemonic::RLA => self.rla(&instruction.addressing_mode),
             Mnemonic::RRA => self.rra(&instruction.addressing_mode),
             Mnemonic::SAX => self.sax(&instruction.addressing_mode),
+            Mnemonic::SBX => self.sbx(),
+            Mnemonic::SHA => self.sha(),
+            Mnemonic::SHX => self.shx(),
+            Mnemonic::SHY => self.shy(),
             Mnemonic::SLO => self.slo(&instruction.addressing_mode),
             Mnemonic::SRE => self.sre(&instruction.addressing_mode),
+            Mnemonic::TAS => self.tas(),
             _ => panic!("unknown opcode: 0x{:x}", opcode),
         }
 

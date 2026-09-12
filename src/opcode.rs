@@ -75,14 +75,26 @@ pub enum Mnemonic {
     TXS,
     TYA,
     // --- unofficial ---
+    ALR,
+    ANC,
+    ANE,
+    ARR,
     DCP,
     ISB,
+    KIL,
+    LAS,
     LAX,
+    LXA,
     RLA,
     RRA,
     SAX,
+    SBX,
+    SHA,
+    SHX,
+    SHY,
     SLO,
     SRE,
+    TAS,
     Unknown,
 }
 
@@ -107,7 +119,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x02
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -161,8 +173,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x0B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::ANC,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0x0C
@@ -203,7 +215,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x12
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -299,7 +311,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x22
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -353,8 +365,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x2B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::ANC,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0x2C
@@ -395,7 +407,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x32
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -491,7 +503,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x42
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -545,8 +557,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x4B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::ALR,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0x4C
@@ -587,7 +599,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x52
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -683,7 +695,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x62
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -737,8 +749,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x6B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::ARR,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0x6C
@@ -779,7 +791,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x72
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -929,8 +941,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x8B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::ANE,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0x8C
@@ -971,14 +983,14 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x92
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
     // 0x93
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::SHA,
+        addressing_mode: AddressingMode::IndirectY,
         cycles: 6,
     },
     // 0x94
@@ -1025,14 +1037,14 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x9B
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::TAS,
+        addressing_mode: AddressingMode::AbsoluteY,
         cycles: 5,
     },
     // 0x9C
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::SHY,
+        addressing_mode: AddressingMode::AbsoluteX,
         cycles: 5,
     },
     // 0x9D
@@ -1043,14 +1055,14 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0x9E
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::SHX,
+        addressing_mode: AddressingMode::AbsoluteY,
         cycles: 5,
     },
     // 0x9F
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::SHA,
+        addressing_mode: AddressingMode::AbsoluteY,
         cycles: 5,
     },
     // 0xA0
@@ -1121,8 +1133,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xAB
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::LXA,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0xAC
@@ -1163,7 +1175,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xB2
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -1217,8 +1229,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xBB
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::LAS,
+        addressing_mode: AddressingMode::AbsoluteY,
         cycles: 4,
     },
     // 0xBC
@@ -1313,8 +1325,8 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xCB
     Instruction {
-        mnemonic: Mnemonic::Unknown,
-        addressing_mode: AddressingMode::Implied,
+        mnemonic: Mnemonic::SBX,
+        addressing_mode: AddressingMode::Immediate,
         cycles: 2,
     },
     // 0xCC
@@ -1355,7 +1367,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xD2
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
@@ -1547,7 +1559,7 @@ pub const INSTRUCTIONS: &[Instruction] = &[
     },
     // 0xF2
     Instruction {
-        mnemonic: Mnemonic::Unknown,
+        mnemonic: Mnemonic::KIL,
         addressing_mode: AddressingMode::Implied,
         cycles: 0,
     },
