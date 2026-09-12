@@ -4772,4 +4772,54 @@ mod test {
 
         assert_eq!(expected_lines.len(), actual_lines.len());
     }
+
+    #[allow(dead_code)]
+    fn run_and_watch_0x6000(rom_path: &str) {
+        let mut cpu = CPU::new(Bus::new(Cartridge::from_file(rom_path).unwrap()));
+        cpu.reset();
+
+        // run until 0x6000 == 0x80 that means test is started
+        for _ in 0..=100_000_000 {
+            cpu.execute_single_instruction();
+            if cpu.bus.mem_peek(0x6000) == 0x80 {
+                break;
+            }
+        }
+        assert_eq!(cpu.bus.mem_peek(0x6000), 0x80);
+
+        // run until 0x6000 != 0x80 that means test is finished
+        for _ in 0..=100_000_000 {
+            //println!("{}", cpu.trace());
+            cpu.execute_single_instruction();
+            let test_status = cpu.bus.mem_peek(0x6000);
+            if test_status != 0x80 {
+                if test_status != 0x00 {
+                    println!(
+                        "{:x} {:x} {:x} {:x}",
+                        cpu.bus.mem_peek(0x6000),
+                        cpu.bus.mem_peek(0x6001),
+                        cpu.bus.mem_peek(0x6002),
+                        cpu.bus.mem_peek(0x6003),
+                    );
+                    for i in 0..=1000 {
+                        let byte: u8 = cpu.bus.mem_peek(0x6004 + i);
+                        if byte == 0 || !byte.is_ascii() {
+                            println!();
+                            break;
+                        }
+                        print!("{}", byte as char);
+                    }
+                }
+
+                assert_eq!(test_status, 0x00);
+                return;
+            }
+        }
+        panic!("test failed: {}", rom_path);
+    }
+
+    //#[test]
+    //fn test_with_rom() {
+    //    run_and_watch_0x6000("rom.nes");
+    //}
 }
