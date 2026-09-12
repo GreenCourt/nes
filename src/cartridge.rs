@@ -66,16 +66,14 @@ mod test {
     use super::*;
 
     impl Cartridge {
-        pub fn from_opcodes(ops: &Vec<u8>) -> Self {
-            let mut prg_rom = vec![0 as u8; 0xFFFF - 0x8000 + 1];
-            for i in 0..ops.len() {
-                prg_rom[i] = ops[i];
-            }
+        pub fn from_opcodes(ops: &[u8]) -> Self {
+            let mut prg_rom = vec![0; 0xFFFF - 0x8000 + 1];
+            prg_rom[..ops.len()].copy_from_slice(ops);
             let reset = 0xFFFC - 0x8000;
             prg_rom[reset] = 0x00;
             prg_rom[reset + 1] = 0x80;
             Cartridge {
-                prg_rom: prg_rom,
+                prg_rom,
                 chr_rom: Vec::<u8>::new(),
                 mapper: 0,
                 screen_mirroring: Mirroring::FourScreen,

@@ -18,7 +18,7 @@ fmt:
 
 check:
 	cargo check --tests
-	cargo clippy
+	cargo clippy --all-targets
 
 b: build
 c: check
