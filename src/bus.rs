@@ -149,6 +149,14 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.read(mirror_down_addr)
             }
+            0x4000..=0x4013 => {
+                // TODO APU
+                0
+            }
+            0x4015 => {
+                // TODO APU
+                0
+            }
             0x4016 => self.controller.read(),
             0x4017 => {
                 0 // 2nd controller is not implemented
@@ -179,12 +187,18 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.write(mirror_down_addr, data);
             }
+            0x4000..=0x4013 => {
+                // TODO APU
+            }
             0x4014 => {
                 // start OAM DMA
                 self.dma_page = data;
                 self.dma_active = true;
                 self.dma_step = 0;
                 self.dma_total_cycles = if self.cycles % 2 == 1 { 514 } else { 513 };
+            }
+            0x4015 => {
+                // TODO APU
             }
             0x4016 => self.controller.write(data),
             0x4017 => {
@@ -230,12 +244,21 @@ mod test {
                     let mirror_down_addr = addr & 0x2007;
                     self.ppu.peek(mirror_down_addr)
                 }
+                0x4000..=0x4013 => {
+                    // TODO APU
+                    0
+                }
+                0x4015 => {
+                    // TODO APU
+                    0
+                }
                 0x4016 => {
                     0 // dummy
                 }
                 0x4017 => {
                     0 // 2nd controller is not implemented
                 }
+                PRG_RAM_START..=PRG_RAM_END => self.read_prg_ram(addr),
                 ROM_START..=ROM_END => self.read_prg_rom(addr),
                 _ => {
                     0 // TODO: dummy
