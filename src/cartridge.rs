@@ -14,6 +14,7 @@ const CHR_ROM_PAGE_SIZE: usize = 8192;
 pub struct Cartridge {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
+    pub prg_ram: Vec<u8>,
     pub mapper: u8,
     pub screen_mirroring: Mirroring,
 }
@@ -47,9 +48,20 @@ impl Cartridge {
         let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
+        // A size of zero for chr_rom is interpreted
+        // as having CHR_RAM instead of CHR_ROM.
+        let has_chr_ram = chr_rom_size == 0;
+
+        let _has_battery = raw[6] & 0b10 != 0;
+
         Ok(Cartridge {
             prg_rom: raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec(),
-            chr_rom: raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec(),
+            chr_rom: if has_chr_ram {
+                vec![0u8; 8192] // 8KiB as CHR-RAM
+            } else {
+                raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec()
+            },
+            prg_ram: vec![0u8; 8192], // always prepare 8KiB prg_ram for the iNES format.
             mapper,
             screen_mirroring,
         })
@@ -75,6 +87,7 @@ mod test {
             Cartridge {
                 prg_rom,
                 chr_rom: Vec::<u8>::new(),
+                prg_ram: Vec::<u8>::new(),
                 mapper: 0,
                 screen_mirroring: Mirroring::FourScreen,
             }

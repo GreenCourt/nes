@@ -6,6 +6,8 @@ const RAM_START: u16 = 0x0000;
 const RAM_MIRROS_END: u16 = 0x1FFF;
 const PPU_REGISTERS_START: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
+const PRG_RAM_START: u16 = 0x6000;
+const PRG_RAM_END: u16 = 0x7FFF;
 const ROM_START: u16 = 0x8000;
 const ROM_END: u16 = 0xFFFF;
 
@@ -20,6 +22,7 @@ pub struct Bus {
     cpu_ram: [u8; 2048],
     ppu: PPU,
     prg_rom: Vec<u8>,
+    prg_ram: Vec<u8>,
     controller: Controller,
     cycles: usize,
 
@@ -36,6 +39,7 @@ impl Bus {
             cpu_ram: [0; 2048],
             ppu: PPU::new(cartridge.chr_rom, cartridge.screen_mirroring),
             prg_rom: cartridge.prg_rom,
+            prg_ram: cartridge.prg_ram,
             controller: Controller::new(),
             cycles: 0,
             dma_active: false,
@@ -53,6 +57,26 @@ impl Bus {
             addr %= 0x4000;
         }
         self.prg_rom[addr as usize]
+    }
+
+    fn read_prg_ram(&self, mut addr: u16) -> u8 {
+        addr -= PRG_RAM_START;
+        if self.prg_ram.len() <= addr as usize {
+            println!("Ignoring mem access at 0x{:X}", addr);
+            return 0;
+        }
+
+        self.prg_ram[addr as usize]
+    }
+
+    fn write_prg_ram(&mut self, mut addr: u16, data: u8) {
+        addr -= PRG_RAM_START;
+        if self.prg_ram.len() <= addr as usize {
+            println!("Attempt to write to 0x{:X}", addr);
+            return;
+        }
+
+        self.prg_ram[addr as usize] = data;
     }
 
     pub fn tick(&mut self, cycles: u8) {
@@ -129,10 +153,11 @@ impl Mem for Bus {
             0x4017 => {
                 0 // 2nd controller is not implemented
             }
+            PRG_RAM_START..=PRG_RAM_END => self.read_prg_ram(addr),
             ROM_START..=ROM_END => self.read_prg_rom(addr),
             _ => {
                 println!("Ignoring mem access at 0x{:X}", addr);
-                0 // TODO: dummy
+                0
             }
         }
     }
@@ -168,8 +193,8 @@ impl Mem for Bus {
             ROM_START..=ROM_END => {
                 println!("Attempt to write to Cartridge ROM space: 0x{:x}", addr);
             }
+            PRG_RAM_START..=PRG_RAM_END => self.write_prg_ram(addr, data),
             _ => {
-                // TODO
                 println!("Ignoring mem write-access at 0x{:X}", addr);
             }
         }
