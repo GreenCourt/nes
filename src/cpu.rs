@@ -292,7 +292,7 @@ impl CPU {
         self.update_negative_flag(result);
     }
 
-    fn branch(&mut self, flag: bool) {
+    fn branch(&mut self, flag: bool) -> bool {
         if flag {
             self.bus.tick(1);
             let (addr, _) = self.get_operand_address(&AddressingMode::Relative);
@@ -301,21 +301,22 @@ impl CPU {
             }
             self.program_counter = addr;
         }
+        flag
     }
 
-    fn bcc(&mut self) {
+    fn bcc(&mut self) -> bool {
         // Branch if Carry Clear
-        self.branch(!self.get_carry_flag());
+        self.branch(!self.get_carry_flag())
     }
 
-    fn bcs(&mut self) {
+    fn bcs(&mut self) -> bool {
         // Branch if Carry Set
-        self.branch(self.get_carry_flag());
+        self.branch(self.get_carry_flag())
     }
 
-    fn beq(&mut self) {
+    fn beq(&mut self) -> bool {
         // Branch if Equal
-        self.branch(self.get_zero_flag());
+        self.branch(self.get_zero_flag())
     }
 
     fn bit(&mut self, mode: &AddressingMode) {
@@ -328,19 +329,19 @@ impl CPU {
         self.update_negative_flag(value);
     }
 
-    fn bmi(&mut self) {
+    fn bmi(&mut self) -> bool {
         // Branch if Minus
-        self.branch(self.get_negative_flag());
+        self.branch(self.get_negative_flag())
     }
 
-    fn bne(&mut self) {
+    fn bne(&mut self) -> bool {
         // Branch if Not Equal
-        self.branch(!self.get_zero_flag());
+        self.branch(!self.get_zero_flag())
     }
 
-    fn bpl(&mut self) {
+    fn bpl(&mut self) -> bool {
         // Branch if Positive
-        self.branch(!self.get_negative_flag());
+        self.branch(!self.get_negative_flag())
     }
 
     fn brk(&mut self) {
@@ -352,14 +353,14 @@ impl CPU {
         self.program_counter = self.mem_read_u16(0xFFFE);
     }
 
-    fn bvc(&mut self) {
+    fn bvc(&mut self) -> bool {
         // Branch if Overflow Clear
-        self.branch(!self.get_overflow_flag());
+        self.branch(!self.get_overflow_flag())
     }
 
-    fn bvs(&mut self) {
+    fn bvs(&mut self) -> bool {
         //Branch if Overflow Set
-        self.branch(self.get_overflow_flag());
+        self.branch(self.get_overflow_flag())
     }
 
     fn clc(&mut self) {
@@ -913,22 +914,25 @@ impl CPU {
 
         let opcode = self.mem_read(self.program_counter);
         let instruction: &Instruction = &INSTRUCTIONS[opcode as usize];
-        let program_counter_before = self.program_counter;
+        let mut program_counter_updated = false;
 
         match instruction.mnemonic {
             Mnemonic::ADC => self.adc(&instruction.addressing_mode, false),
             Mnemonic::AND => self.and(&instruction.addressing_mode, false),
             Mnemonic::ASL => self.asl(&instruction.addressing_mode),
-            Mnemonic::BCC => self.bcc(),
-            Mnemonic::BCS => self.bcs(),
-            Mnemonic::BEQ => self.beq(),
+            Mnemonic::BCC => program_counter_updated = self.bcc(),
+            Mnemonic::BCS => program_counter_updated = self.bcs(),
+            Mnemonic::BEQ => program_counter_updated = self.beq(),
             Mnemonic::BIT => self.bit(&instruction.addressing_mode),
-            Mnemonic::BMI => self.bmi(),
-            Mnemonic::BNE => self.bne(),
-            Mnemonic::BPL => self.bpl(),
-            Mnemonic::BRK => self.brk(),
-            Mnemonic::BVC => self.bvc(),
-            Mnemonic::BVS => self.bvs(),
+            Mnemonic::BMI => program_counter_updated = self.bmi(),
+            Mnemonic::BNE => program_counter_updated = self.bne(),
+            Mnemonic::BPL => program_counter_updated = self.bpl(),
+            Mnemonic::BRK => {
+                self.brk();
+                program_counter_updated = true
+            }
+            Mnemonic::BVC => program_counter_updated = self.bvc(),
+            Mnemonic::BVS => program_counter_updated = self.bvs(),
             Mnemonic::CLC => self.clc(),
             Mnemonic::CLD => self.cld(),
             Mnemonic::CLI => self.cli(),
@@ -943,8 +947,14 @@ impl CPU {
             Mnemonic::INC => self.inc(&instruction.addressing_mode),
             Mnemonic::INX => self.inx(),
             Mnemonic::INY => self.iny(),
-            Mnemonic::JMP => self.jmp(&instruction.addressing_mode),
-            Mnemonic::JSR => self.jsr(),
+            Mnemonic::JMP => {
+                self.jmp(&instruction.addressing_mode);
+                program_counter_updated = true;
+            }
+            Mnemonic::JSR => {
+                self.jsr();
+                program_counter_updated = true;
+            }
             Mnemonic::LDA => self.lda(&instruction.addressing_mode),
             Mnemonic::LDX => self.ldx(&instruction.addressing_mode),
             Mnemonic::LDY => self.ldy(&instruction.addressing_mode),
@@ -957,8 +967,14 @@ impl CPU {
             Mnemonic::PLP => self.plp(),
             Mnemonic::ROL => self.rol(&instruction.addressing_mode),
             Mnemonic::ROR => self.ror(&instruction.addressing_mode),
-            Mnemonic::RTI => self.rti(),
-            Mnemonic::RTS => self.rts(),
+            Mnemonic::RTI => {
+                self.rti();
+                program_counter_updated = true;
+            }
+            Mnemonic::RTS => {
+                self.rts();
+                program_counter_updated = true;
+            }
             Mnemonic::SBC => self.sbc(&instruction.addressing_mode, false),
             Mnemonic::SEC => self.sec(),
             Mnemonic::SED => self.sed(),
@@ -998,7 +1014,7 @@ impl CPU {
 
         self.bus.tick(instruction.cycles);
 
-        if self.program_counter == program_counter_before {
+        if !program_counter_updated {
             self.program_counter += match instruction.addressing_mode {
                 AddressingMode::Accumulator => 1,
                 AddressingMode::Immediate => 2,
