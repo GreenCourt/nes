@@ -29,7 +29,7 @@ pub struct PPU {
 
     scanline: u16,
     cycles: usize,
-    pub nmi_interrupt: Option<u8>,
+    nmi_interrupt: Option<u8>,
 
     frame: Frame,
     sprite_zero_hit_cycle: Option<u16>,

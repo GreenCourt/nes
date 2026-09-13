@@ -11,6 +11,13 @@ pub struct CPU {
     pub bus: Bus,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum InterruptMode {
+    NMI,
+    IRQ,
+    BRK,
+}
+
 impl Mem for CPU {
     fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
@@ -346,11 +353,7 @@ impl CPU {
 
     fn brk(&mut self) {
         //  Force Interrupt
-        self.stack_push_u16(self.program_counter);
-        self.stack_push(self.status | CPU::STATUS_RESERVED | CPU::STATUS_BREAK);
-        self.set_interrupt_disable_flag(true);
-        self.bus.tick(1);
-        self.program_counter = self.mem_read_u16(0xFFFE);
+        self.interrupt(InterruptMode::BRK);
     }
 
     fn bvc(&mut self) -> bool {
@@ -888,15 +891,31 @@ impl CPU {
         panic!("unsupported opcode: SHY");
     }
 
-    fn interrupt_nmi(&mut self) {
+    fn interrupt(&mut self, mode: InterruptMode) {
         self.stack_push_u16(self.program_counter);
         let mut status = self.status;
-        status &= !CPU::STATUS_BREAK;
+        if mode == InterruptMode::NMI {
+            status &= !CPU::STATUS_BREAK;
+        } else {
+            status |= CPU::STATUS_BREAK;
+        }
         status |= CPU::STATUS_RESERVED;
         self.stack_push(status);
-        self.status |= CPU::STATUS_INTERRUPT_DISABLE;
-        self.bus.tick(2);
-        self.program_counter = self.mem_read_u16(0xFFFA);
+        self.set_interrupt_disable_flag(true);
+
+        if mode != InterruptMode::BRK {
+            self.bus.tick(7);
+        }
+
+        self.program_counter = self.mem_read_u16(match mode {
+            InterruptMode::NMI => 0xFFFA,
+            InterruptMode::BRK => 0xFFFE,
+            InterruptMode::IRQ => 0xFFFE,
+        });
+    }
+
+    fn interrupt_nmi(&mut self) {
+        self.interrupt(InterruptMode::NMI);
     }
 
     pub fn execute_single_instruction(&mut self) -> usize {
