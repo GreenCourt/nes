@@ -1,18 +1,28 @@
 #![cfg(target_arch = "wasm32")]
 use super::nes::Nes;
 use super::ppu::Frame;
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use eframe::egui;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 const NES_WIDTH: usize = 256;
 const NES_HEIGHT: usize = 240;
 const RESOLUTION_SCALING: usize = 3;
 
+const AUDIO_TARGET_SECONDS: f64 = 0.1;
+const AUDIO_MAX_SECONDS: f64 = 0.5;
+type AudioBuffer = Arc<Mutex<VecDeque<f32>>>;
+
 pub struct NesApp {
     rom_data: Arc<Mutex<Option<Vec<u8>>>>,
     nes: Option<Nes>,
     texture: Option<egui::TextureHandle>,
     message: String,
+
+    audio_buffer: AudioBuffer,
+    audio_sample_rate: u32,
+    audio_stream: Option<cpal::Stream>,
 }
 
 impl NesApp {
@@ -30,7 +40,38 @@ impl NesApp {
             nes: None,
             texture: None,
             message: String::new(),
+            audio_buffer: Arc::new(Mutex::new(VecDeque::new())),
+            audio_sample_rate: 44100, // will be updated after building Stream
+            audio_stream: None,
         }
+    }
+
+    fn build_audio_stream(buffer: AudioBuffer) -> Option<(cpal::Stream, u32)> {
+        let host = cpal::default_host();
+        let device = host.default_output_device()?;
+        let config = device.default_output_config().ok()?;
+        let sample_rate = config.sample_rate();
+        let channels = config.channels() as usize;
+
+        let stream = device
+            .build_output_stream(
+                config.into(),
+                move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                    let mut buf = buffer.lock().unwrap();
+                    for frame in data.chunks_mut(channels) {
+                        // no-sound if buffer is empty
+                        let sample = buf.pop_front().unwrap_or(0.0);
+                        for out in frame.iter_mut() {
+                            *out = sample;
+                        }
+                    }
+                },
+                move |_err| { /* log output if needed */ },
+                None,
+            )
+            .ok()?;
+        stream.play().ok()?;
+        Some((stream, sample_rate))
     }
 
     fn open_rom_dialog(&self, ctx: egui::Context) {
@@ -94,7 +135,17 @@ impl eframe::App for NesApp {
             nes.update_button_a(key_k);
             nes.update_button_b(key_j);
 
-            nes.step(0.01); // TODO: Specify the correct number of seconds.
+            // fill audio buffer and step CPU cycles based on it.
+            let target_len = (self.audio_sample_rate as f64 * AUDIO_TARGET_SECONDS) as usize;
+            let max_len = (self.audio_sample_rate as f64 * AUDIO_MAX_SECONDS) as usize;
+            let current_len = self.audio_buffer.lock().unwrap().len();
+
+            if current_len < target_len {
+                let samples_needed = (target_len - current_len).min(max_len);
+                let generated_samples = nes.step(samples_needed, self.audio_sample_rate);
+                self.audio_buffer.lock().unwrap().extend(generated_samples);
+            }
+
             ctx.request_repaint_after(std::time::Duration::from_secs_f32(1.0 / 60.0));
         }
     }
@@ -133,6 +184,17 @@ impl eframe::App for NesApp {
             }
 
             if ui.button("Open ROM").clicked() {
+                // Lazily create the audio stream on the first user interaction.
+                // Browsers block audio output until it's started from within a user
+                // gesture (e.g. a click), so we can't set this up in `new()`.
+                if self.audio_stream.is_none()
+                    && let Some((stream, sample_rate)) =
+                        Self::build_audio_stream(Arc::clone(&self.audio_buffer))
+                {
+                    self.audio_sample_rate = sample_rate;
+                    self.audio_stream = Some(stream);
+                }
+
                 self.open_rom_dialog(ctx.clone());
             }
 

@@ -1,3 +1,4 @@
+use super::apu::APU;
 use super::cartridge::Cartridge;
 use super::controller::Controller;
 use super::ppu::{Frame, PPU};
@@ -21,6 +22,7 @@ pub trait Mem {
 pub struct Bus {
     cpu_ram: [u8; 2048],
     ppu: PPU,
+    apu: APU,
     prg_rom: Vec<u8>,
     prg_ram: Vec<u8>,
     controller: Controller,
@@ -38,6 +40,7 @@ impl Bus {
         Bus {
             cpu_ram: [0; 2048],
             ppu: PPU::new(cartridge.chr_rom, cartridge.screen_mirroring),
+            apu: APU::new(),
             prg_rom: cartridge.prg_rom,
             prg_ram: cartridge.prg_ram,
             controller: Controller::new(),
@@ -85,10 +88,15 @@ impl Bus {
             self.process_dma(cycles);
         }
         self.ppu.tick(cycles * 3);
+        self.apu.tick(cycles);
     }
 
     pub fn poll_nmi_interrupt(&mut self) -> Option<u8> {
         self.ppu.poll_nmi_interrupt()
+    }
+
+    pub fn poll_apu_frame_interrupt(&mut self) -> Option<u8> {
+        self.apu.poll_frame_interrupt()
     }
 
     fn process_dma(&mut self, cycles: u8) {
@@ -132,6 +140,10 @@ impl Bus {
         self.ppu.get_frame()
     }
 
+    pub fn get_audio_sample(&self) -> f32 {
+        self.apu.get_sample()
+    }
+
     pub fn update_button_status(&mut self, pushed: bool, button_bit: u8) {
         self.controller.update_button_status(pushed, button_bit);
     }
@@ -149,14 +161,7 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.read(mirror_down_addr)
             }
-            0x4000..=0x4013 => {
-                // TODO APU
-                0
-            }
-            0x4015 => {
-                // TODO APU
-                0
-            }
+            0x4000..=0x4013 | 0x4015 => self.apu.read(addr),
             0x4016 => self.controller.read(),
             0x4017 => {
                 0 // 2nd controller is not implemented
@@ -187,9 +192,7 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0x2007;
                 self.ppu.write(mirror_down_addr, data);
             }
-            0x4000..=0x4013 => {
-                // TODO APU
-            }
+            0x4000..=0x4013 | 0x4015 | 0x4017 => self.apu.write(addr, data),
             0x4014 => {
                 // start OAM DMA
                 self.dma_page = data;
@@ -197,13 +200,7 @@ impl Mem for Bus {
                 self.dma_step = 0;
                 self.dma_total_cycles = if self.cycles % 2 == 1 { 514 } else { 513 };
             }
-            0x4015 => {
-                // TODO APU
-            }
             0x4016 => self.controller.write(data),
-            0x4017 => {
-                // 2nd controller is not implemented
-            }
             ROM_START..=ROM_END => {
                 println!("Attempt to write to Cartridge ROM space: 0x{:x}", addr);
             }

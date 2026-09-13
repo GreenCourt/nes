@@ -90,6 +90,10 @@ impl CPU {
         };
     }
 
+    fn get_interrupt_disable_flag(&mut self) -> bool {
+        (self.status & CPU::STATUS_INTERRUPT_DISABLE) != 0
+    }
+
     fn set_decimal_mode_flag(&mut self, flag: bool) {
         if flag {
             self.status |= CPU::STATUS_DECIMAL_MODE;
@@ -914,10 +918,6 @@ impl CPU {
         });
     }
 
-    fn interrupt_nmi(&mut self) {
-        self.interrupt(InterruptMode::NMI);
-    }
-
     pub fn execute_single_instruction(&mut self) -> usize {
         let cycles_before = self.bus.get_cycles();
 
@@ -927,7 +927,14 @@ impl CPU {
         }
 
         if let Some(_nmi) = self.bus.poll_nmi_interrupt() {
-            self.interrupt_nmi();
+            self.interrupt(InterruptMode::NMI);
+            return self.bus.get_cycles().wrapping_sub(cycles_before);
+        }
+
+        if !self.get_interrupt_disable_flag()
+            && let Some(_irq) = self.bus.poll_apu_frame_interrupt()
+        {
+            self.interrupt(InterruptMode::IRQ);
             return self.bus.get_cycles().wrapping_sub(cycles_before);
         }
 
@@ -1064,10 +1071,6 @@ mod test {
     use std::io::{BufRead, BufReader};
 
     impl CPU {
-        fn get_interrupt_disable_flag(&mut self) -> bool {
-            (self.status & CPU::STATUS_INTERRUPT_DISABLE) != 0
-        }
-
         fn get_decimal_mode_flag(&mut self) -> bool {
             (self.status & CPU::STATUS_DECIMAL_MODE) != 0
         }

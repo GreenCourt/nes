@@ -4,11 +4,13 @@ use super::controller::Controller;
 use super::cpu::CPU;
 use super::ppu::Frame;
 
-const CPU_CLOCK_HZ: f64 = 1_789_773.0;
+// CPU clock = 19_687_500 / 11 Hz (NTSC)
+const CPU_CLOCK_NUMERATOR: u64 = 19_687_500;
+const CPU_CLOCK_DENOMINATOR: u64 = 11;
 
 pub struct Nes {
     cpu: CPU,
-    overshoot_cycles: usize,
+    audio_sample_cycle_remainder_scaled: u64,
 }
 
 impl Nes {
@@ -17,17 +19,35 @@ impl Nes {
         cpu.reset();
         Ok(Nes {
             cpu,
-            overshoot_cycles: 0,
+            audio_sample_cycle_remainder_scaled: 0,
         })
     }
 
-    pub fn step(&mut self, time_sec: f64) {
-        let cycles_to_elapse: usize = (time_sec * CPU_CLOCK_HZ) as usize + self.overshoot_cycles;
-        let mut elapsed_cycles: usize = 0;
-        while elapsed_cycles < cycles_to_elapse {
-            elapsed_cycles += self.cpu.execute_single_instruction();
+    pub fn step(&mut self, num_audio_samples: usize, sample_rate: u32) -> Vec<f32> {
+        let mut samples = Vec::with_capacity(num_audio_samples);
+
+        //
+        // Track the cycle/sample ratio as an exact rational number to avoid floating-point drift.
+        // Cycles per sample = CPU_CLOCK_HZ / sample_rate
+        //                    = CPU_CLOCK_NUMERATOR / (CPU_CLOCK_DENOMINATOR * sample_rate)
+        //
+        // So `threshold` is the numerator, and `scale` is the denominator.
+        //
+        let scale: u64 = sample_rate as u64 * CPU_CLOCK_DENOMINATOR;
+        let threshold: u64 = CPU_CLOCK_NUMERATOR;
+
+        while samples.len() < num_audio_samples {
+            let cycles = self.cpu.execute_single_instruction() as u64;
+            self.audio_sample_cycle_remainder_scaled += cycles * scale;
+
+            while self.audio_sample_cycle_remainder_scaled >= threshold
+                && samples.len() < num_audio_samples
+            {
+                samples.push(self.cpu.bus.get_audio_sample());
+                self.audio_sample_cycle_remainder_scaled -= threshold;
+            }
         }
-        self.overshoot_cycles = elapsed_cycles - cycles_to_elapse;
+        samples
     }
 
     pub fn get_frame(&self) -> &Frame {
@@ -36,7 +56,7 @@ impl Nes {
 
     pub fn reset(&mut self) {
         self.cpu.reset();
-        self.overshoot_cycles = 0;
+        self.audio_sample_cycle_remainder_scaled = 0;
     }
 
     pub fn update_button_right(&mut self, pushed: bool) {
